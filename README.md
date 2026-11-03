@@ -25,6 +25,8 @@ TypeScript проверката първо генерира Next.js типове
 
 ## Публикуване във Vercel
 
+`vercel.json` задава изрично Next.js и командите за инсталация и build. Така публикуването не зависи от стара настройка Framework Preset: Other в проекта. Промяната влиза в сила при нов deployment; вече публикуваните версии не се променят.
+
 1. Импортирай GitHub хранилището във Vercel: Add New → Project → Import Git Repository.
 2. Framework Preset: **Next.js**; Root Directory: основната папка на хранилището (`.`).
 3. Node.js: **24.x**; Install Command: `npm ci`; Build Command: `npm run build`. Остави Output Directory по подразбиране за Next.js.
