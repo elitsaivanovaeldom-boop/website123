@@ -165,7 +165,7 @@ test("fine-line planet renders, respects reduced motion and supports drag", asyn
 test("layout fits small phones, tablets and desktop screens", async ({
   page,
 }) => {
-  await expect(page).toHaveTitle("Малки стъпки — Големи открития за 1. клас");
+  await expect(page).toHaveTitle("Малки стъпки - Големи открития за 1. клас");
   for (const width of [320, 390, 768, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();

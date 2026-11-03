@@ -64,7 +64,7 @@ export default function Home() {
         Към упражненията
       </a>
       <header className="site-header container">
-        <a className="brand" href="#home" aria-label="Малки стъпки — начало">
+        <a className="brand" href="#home" aria-label="Малки стъпки - начало">
           <Flower />
           <span>
             малки
@@ -98,7 +98,7 @@ export default function Home() {
             </h1>
             <p className="hero-description">
               Първите букви. Първите задачи. Първото „Аз мога!“. Откриваме
-              радостта от ученето — с игра, спокойствие и малко въображение.
+              радостта от ученето - с игра, спокойствие и малко въображение.
             </p>
             <div className="hero-actions">
               <a className="button button-primary" href="#practice">
@@ -202,12 +202,11 @@ export default function Home() {
             <motion.div {...reveal} className="practice-copy">
               <p className="eyebrow">МАЛКО ИГРА. МНОГО „АЗ МОГА!“.</p>
               <h2 id="practice-title">
-                Да започнем
-                <br />с нещо <span>малко.</span>
+                Да започнем <br />с нещо <span>малко.</span>
               </h2>
               <p>
                 Избери тема и направи първото си откритие. Ако не стане от
-                първия път, опитай пак — точно така се учим.
+                първия път, опитай пак - точно така се учим.
               </p>
               <div className="encouragement">
                 <Flower />
@@ -280,9 +279,9 @@ export default function Home() {
         <section className="closing container">
           <Flower />
           <h2>
-            Днес — малка стъпка.
+            Днес - малка стъпка.
             <br />
-            <span>Утре — „Аз мога!“.</span>
+            <span>Утре - „Аз мога!“.</span>
           </h2>
           <a className="button button-primary" href="#practice">
             Хайде да откриваме <span aria-hidden="true">→</span>
