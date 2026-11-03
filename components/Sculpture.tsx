@@ -11,6 +11,25 @@ function LearningPlanet({ reduced }: { reduced: boolean }) {
   const previous = useRef({ x: 0, y: 0 });
   const rotation = useRef({ x: 0.15, y: 0 });
 
+  useEffect(() => {
+    const followMouse = (event: PointerEvent) => {
+      if (
+        event.pointerType !== "mouse" ||
+        event.buttons !== 0 ||
+        dragging.current
+      )
+        return;
+      rotation.current.y += event.movementX * 0.006;
+      rotation.current.x = THREE.MathUtils.clamp(
+        rotation.current.x + event.movementY * 0.004,
+        -0.8,
+        0.8,
+      );
+    };
+    window.addEventListener("pointermove", followMouse, { passive: true });
+    return () => window.removeEventListener("pointermove", followMouse);
+  }, []);
+
   useFrame((_, delta) => {
     if (!group.current) return;
     if (reduced) {
@@ -136,7 +155,7 @@ export default function Sculpture() {
     <div
       className="planet-canvas"
       role="img"
-      aria-label="Интерактивна планета на знанието, изтъкана от фини цветни линии. Завърти с мишка или с пръст."
+      aria-label="Интерактивна планета на знанието, изтъкана от фини цветни линии. Движи мишката, за да я завъртиш, или плъзни с пръст."
     >
       <Canvas
         camera={{ position: [0, 0, 5.6], fov: 46 }}
