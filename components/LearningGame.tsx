@@ -1,6 +1,12 @@
 "use client";
 
 import { useRef, useState } from "react";
+import {
+  literacyQuestions,
+  describeSoundModel,
+  type LiteracyMode,
+  type Question,
+} from "@/lib/literacy";
 
 export type Subject = "letters" | "numbers" | "world";
 export const subjects: {
@@ -14,7 +20,8 @@ export const subjects: {
     id: "letters",
     symbol: "Аа",
     title: "Букви и думи",
-    description: "Откриваме звуци, познаваме букви и четем първите си думи.",
+    description:
+      "Познаваме букви, правим звукови модели и броим сричките в думите.",
     color: "lavender",
   },
   {
@@ -32,7 +39,7 @@ export const subjects: {
     color: "peach",
   },
 ];
-const questions = {
+const questions: Record<Subject, Question[]> = {
   letters: [
     {
       visual: "МАЛИНА",
@@ -155,20 +162,33 @@ export default function LearningGame({
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [finished, setFinished] = useState(false);
+  const [mode, setMode] = useState<LiteracyMode>("letters");
   const questionHeading = useRef<HTMLHeadingElement>(null);
   const current = subjects.find((item) => item.id === subject)!;
-  const question = questions[subject][index];
+  const activeQuestions =
+    subject === "letters" && mode !== "letters"
+      ? literacyQuestions[mode]
+      : questions[subject];
+  const total = activeQuestions.length;
+  const question = activeQuestions[index];
   const correct = selected === question.correct;
-  const progress = finished ? 4 : index + (correct ? 1 : 0);
+  const progress = finished ? total : index + (correct ? 1 : 0);
 
   function chooseSubject(next: Subject) {
     onSubjectChange(next);
     setIndex(0);
     setSelected(null);
     setFinished(false);
+    setMode("letters");
+  }
+  function chooseMode(next: LiteracyMode) {
+    setMode(next);
+    setIndex(0);
+    setSelected(null);
+    setFinished(false);
   }
   function nextQuestion() {
-    if (index === questions[subject].length - 1) setFinished(true);
+    if (index === total - 1) setFinished(true);
     else setIndex((value) => value + 1);
     setSelected(null);
     requestAnimationFrame(() => questionHeading.current?.focus());
@@ -193,20 +213,46 @@ export default function LearningGame({
           </button>
         ))}
       </div>
+      {subject === "letters" && (
+        <div
+          className="literacy-picker"
+          role="group"
+          aria-label="Упражнения по български език"
+        >
+          {(
+            [
+              ["letters", "Букви"],
+              ["sounds", "Звукови модели"],
+              ["syllables", "Срички"],
+            ] as const
+          ).map(([id, title]) => (
+            <button
+              key={id}
+              className={mode === id ? "is-active" : ""}
+              aria-pressed={mode === id}
+              onClick={() => chooseMode(id)}
+            >
+              {title}
+            </button>
+          ))}
+        </div>
+      )}
       <div className={`exercise ${current.color}`}>
         <div className="exercise-top">
           <span>МАЛКА СТЪПКА, ГОЛЯМО БРАВО</span>
-          <span>{progress} / 4</span>
+          <span>
+            {progress} / {total}
+          </span>
         </div>
         <div
           className="progress-track"
           role="progressbar"
           aria-label="Завършени задачи"
           aria-valuemin={0}
-          aria-valuemax={4}
+          aria-valuemax={total}
           aria-valuenow={progress}
         >
-          <span style={{ width: `${progress * 25}%` }} />
+          <span style={{ width: `${(progress / total) * 100}%` }} />
         </div>
         {finished ? (
           <div className="completion">
@@ -222,7 +268,7 @@ export default function LearningGame({
             </p>
             <button
               className="button button-primary"
-              onClick={() => chooseSubject(subject)}
+              onClick={() => chooseMode(mode)}
             >
               Да опитаме пак ↻
             </button>
@@ -234,10 +280,30 @@ export default function LearningGame({
               {question.prompt}
             </h3>
             <p className="exercise-instruction">
-              Избери своя отговор. Тук можеш спокойно да опитваш.
+              {question.kind === "sound-model"
+                ? "Произнеси думата бавно. Всяко квадратче показва един звук."
+                : question.kind === "syllables"
+                  ? "Кажи думата на части и пляскай при всяка сричка. Преброй плясканията."
+                  : "Избери своя отговор. Тук можеш спокойно да опитваш."}
             </p>
+            {question.kind === "sound-model" && (
+              <div className="sound-legend">
+                <span>
+                  <i className="sound-tile vowel" aria-hidden="true">
+                    Г
+                  </i>{" "}
+                  <span>гласен звук</span>
+                </span>
+                <span>
+                  <i className="sound-tile consonant" aria-hidden="true">
+                    С
+                  </i>{" "}
+                  <span>съгласен звук</span>
+                </span>
+              </div>
+            )}
             <div
-              className="answers"
+              className={`answers ${question.kind === "sound-model" ? "sound-answers" : ""}`}
               role="group"
               aria-label="Възможни отговори"
             >
@@ -245,17 +311,72 @@ export default function LearningGame({
                 <button
                   key={choice}
                   disabled={correct}
+                  aria-label={
+                    question.kind === "sound-model"
+                      ? `Модел ${answer + 1}: ${describeSoundModel(choice)}`
+                      : undefined
+                  }
                   aria-pressed={selected === answer}
                   className={`answer ${selected === answer ? (correct ? "answer-correct" : "answer-retry") : ""}`}
                   onClick={() => setSelected(answer)}
                 >
-                  {choice}
+                  {question.kind === "sound-model" ? (
+                    <>
+                      <span className="model-name" aria-hidden="true">
+                        Модел {answer + 1}
+                      </span>
+                      <span className="sound-pattern" aria-hidden="true">
+                        {[...choice].map((sound, position) => (
+                          <span
+                            key={position}
+                            className={`sound-tile ${sound === "Г" ? "vowel" : "consonant"}`}
+                          >
+                            {sound}
+                          </span>
+                        ))}
+                      </span>
+                    </>
+                  ) : (
+                    choice
+                  )}
                   {selected === answer && (
                     <span aria-hidden="true">{correct ? " ✓" : " ↻"}</span>
                   )}
                 </button>
               ))}
             </div>
+            {correct && question.kind === "sound-model" && (
+              <div
+                className="sound-breakdown"
+                role="group"
+                aria-label="Думата и нейните звукове"
+              >
+                {[...question.visual].map((letter, position) => (
+                  <span key={position}>
+                    <span
+                      className={`sound-tile ${question.choices[question.correct][position] === "Г" ? "vowel" : "consonant"}`}
+                      aria-label={`${letter}: ${question.choices[question.correct][position] === "Г" ? "гласен" : "съгласен"} звук`}
+                    >
+                      {letter}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
+            {correct && question.syllables && (
+              <div
+                className="syllable-breakdown"
+                role="group"
+                aria-label="Думата, разделена на срички"
+              >
+                {question.syllables.map((syllable, position) => (
+                  <span key={position}>
+                    {syllable}
+                    <small>{position + 1}</small>
+                  </span>
+                ))}
+              </div>
+            )}
             <div
               className={`feedback ${correct ? "feedback-correct" : ""}`}
               role="status"
@@ -273,7 +394,9 @@ export default function LearningGame({
                 className="button button-primary next-question"
                 onClick={nextQuestion}
               >
-                {index === 3 ? "Виж как се справи" : "Следващо откритие"}{" "}
+                {index === total - 1
+                  ? "Виж как се справи"
+                  : "Следващо откритие"}{" "}
                 <span aria-hidden="true">→</span>
               </button>
             )}

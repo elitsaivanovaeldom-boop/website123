@@ -10,11 +10,7 @@ import LearningGame, {
 
 const Sculpture = dynamic(() => import("@/components/Sculpture"), {
   ssr: false,
-  loading: () => (
-    <div className="planet-canvas planet-fallback">
-      Подреждаме нашата вселена…
-    </div>
-  ),
+  loading: () => <div className="book-loading">Разгръщаме нашата азбука…</div>,
 });
 const reveal = {
   initial: { opacity: 0, y: 18 },
@@ -64,7 +60,7 @@ export default function Home() {
         Към упражненията
       </a>
       <header className="site-header container">
-        <a className="brand" href="#home" aria-label="Малки стъпки — начало">
+        <a className="brand" href="#home" aria-label="Малки стъпки - начало">
           <Flower />
           <span>
             малки
@@ -98,7 +94,7 @@ export default function Home() {
             </h1>
             <p className="hero-description">
               Първите букви. Първите задачи. Първото „Аз мога!“. Откриваме
-              радостта от ученето — с игра, спокойствие и малко въображение.
+              радостта от ученето - с игра, спокойствие и малко въображение.
             </p>
             <div className="hero-actions">
               <a className="button button-primary" href="#practice">
@@ -121,21 +117,8 @@ export default function Home() {
             </div>
           </motion.div>
           <div className="hero-art">
-            <div className="planet-halo" />
-            <span className="orbit-label label-letter" aria-hidden="true">
-              А<span>а</span>
-            </span>
-            <span className="orbit-label label-number" aria-hidden="true">
-              1<span>2</span>3
-            </span>
-            <span className="orbit-star" aria-hidden="true">
-              ✧
-            </span>
+            <div className="book-halo" />
             <Sculpture />
-            <span className="planet-caption">
-              <span aria-hidden="true">↔</span> Движи мишката или плъзни с
-              пръст
-            </span>
             <span className="art-note">
               Всяко „защо?“
               <br />е ново начало.
@@ -202,12 +185,11 @@ export default function Home() {
             <motion.div {...reveal} className="practice-copy">
               <p className="eyebrow">МАЛКО ИГРА. МНОГО „АЗ МОГА!“.</p>
               <h2 id="practice-title">
-                Да започнем
-                <br />с нещо <span>малко.</span>
+                Да започнем <br />с нещо <span>малко.</span>
               </h2>
               <p>
                 Избери тема и направи първото си откритие. Ако не стане от
-                първия път, опитай пак — точно така се учим.
+                първия път, опитай пак - точно така се учим.
               </p>
               <div className="encouragement">
                 <Flower />
@@ -280,9 +262,9 @@ export default function Home() {
         <section className="closing container">
           <Flower />
           <h2>
-            Днес — малка стъпка.
+            Днес - малка стъпка.
             <br />
-            <span>Утре — „Аз мога!“.</span>
+            <span>Утре - „Аз мога!“.</span>
           </h2>
           <a className="button button-primary" href="#practice">
             Хайде да откриваме <span aria-hidden="true">→</span>
