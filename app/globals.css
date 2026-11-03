@@ -1,2 +1,54 @@
 @import "tailwindcss";
-:root{color-scheme:dark}*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:#101014;color:#f8f7f6;font-family:Arial,Helvetica,sans-serif}::selection{background:#ff6847;color:#101014}.noise{background-image:radial-gradient(#ffffff0a 0.5px,transparent 0.5px);background-size:5px 5px}.accent{color:#ff6847}.outline-title{-webkit-text-stroke:1px #ffffff40;color:transparent}.nav-link{transition:color .2s}.nav-link:hover{color:#ff6847}canvas{touch-action:pan-y}.hero-gradient{background:radial-gradient(ellipse at 50% 45%,#29272a 0%,#18171b 38%,#101014 72%)}
+:root {
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+html {
+  scroll-behavior: smooth;
+}
+body {
+  margin: 0;
+  background: #101014;
+  color: #f8f7f6;
+  font-family: Arial, Helvetica, sans-serif;
+}
+::selection {
+  background: #ff6847;
+  color: #101014;
+}
+.noise {
+  background-image: radial-gradient(#ffffff0a 0.5px, transparent 0.5px);
+  background-size: 5px 5px;
+}
+.accent {
+  color: #ff6847;
+}
+.outline-title {
+  -webkit-text-stroke: 1px #ffffff40;
+  color: transparent;
+}
+.nav-link {
+  transition: color 0.2s;
+}
+.nav-link:hover {
+  color: #ff6847;
+}
+canvas {
+  touch-action: pan-y;
+}
+.hero-gradient {
+  background: radial-gradient(
+    ellipse at 50% 45%,
+    #29272a 0%,
+    #18171b 38%,
+    #101014 72%
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
