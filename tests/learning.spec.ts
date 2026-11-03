@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { globeLabels, globePoint } from "../lib/earth-globe";
 
 test.beforeEach(async ({ page }) => {
   // The learning games and procedural model must work without a third-party CDN.
@@ -214,6 +215,38 @@ test("syllables count one to four parts and mode changes reset feedback", async 
   await expect(
     page.getByRole("button", { name: "Букви", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("Earth globe separates numbers and Bulgarian letters at the equator", async ({
+  page,
+}) => {
+  const numbers = globeLabels.filter((label) => label.hemisphere === "north");
+  const letters = globeLabels.filter((label) => label.hemisphere === "south");
+  expect(
+    numbers
+      .map((label) => label.text)
+      .sort()
+      .join(""),
+  ).toBe("0123456789");
+  expect(
+    letters
+      .map((label) => label.text)
+      .sort()
+      .join(""),
+  ).toBe("АБВГДЕЖЗИЙ");
+  for (const label of numbers)
+    expect(globePoint(label.longitude, label.latitude)[1]).toBeGreaterThan(0);
+  for (const label of letters)
+    expect(globePoint(label.longitude, label.latitude)[1]).toBeLessThan(0);
+  await expect(
+    page.getByRole("img", { name: /Земно кълбо с фини меридиани/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Числа над екватора", { exact: false }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("Букви под екватора", { exact: false }),
+  ).toBeVisible();
 });
 
 test("figure follows mouse movement without clicking and remains still with reduced motion", async ({

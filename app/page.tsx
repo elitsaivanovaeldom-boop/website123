@@ -11,7 +11,7 @@ import LearningGame, {
 const Sculpture = dynamic(() => import("@/components/Sculpture"), {
   ssr: false,
   loading: () => (
-    <div className="figure-loading">Подреждаме цветовете и въображението…</div>
+    <div className="figure-loading">Завъртаме нашия свят от знания…</div>
   ),
 });
 const reveal = {

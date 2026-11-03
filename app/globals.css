@@ -1302,3 +1302,41 @@ h2 span {
     font-size: 11px;
   }
 }
+
+.figure-legend {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 0 auto 18px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.figure-legend > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.figure-legend b {
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.north-mark {
+  background: #f1ebfa;
+  color: #7764ab;
+}
+.south-mark {
+  background: #e6f1e9;
+  color: #487e6b;
+}
+@media (max-width: 760px) {
+  .figure-legend {
+    font-size: 10px;
+    gap: 8px 12px;
+  }
+  .figure-legend b {
+    font-size: 10px;
+  }
+}
