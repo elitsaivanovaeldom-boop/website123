@@ -216,40 +216,107 @@ test("syllables count one to four parts and mode changes reset feedback", async 
   ).toHaveAttribute("aria-pressed", "true");
 });
 
-test("alphabet book responds to mouse movement and mobile page swipes", async ({
+test("book shows local handwriting and follows the mouse without clicks", async ({
+  page,
+  isMobile,
+}) => {
+  await expect(page.locator(".book-widget")).toHaveAttribute(
+    "data-handwriting",
+    "ready",
+  );
+  const font = await page.evaluate(async () => {
+    const faces = await document.fonts.load(
+      '100px "Malki Handwriting"',
+      "АаБбДдТтЖжЩщЪъЬьЮюЯя",
+    );
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d")!;
+    context.font = '100px "Malki Handwriting"';
+    const handwriting = context.measureText("АаБбДдТтЖжЩщЪъЬьЮюЯя").width;
+    context.font = "100px Arial";
+    return {
+      loaded:
+        faces.length > 0 && faces.every((face) => face.status === "loaded"),
+      difference: Math.abs(
+        handwriting - context.measureText("АаБбДдТтЖжЩщЪъЬьЮюЯя").width,
+      ),
+    };
+  });
+  expect(font.loaded).toBe(true);
+  expect(font.difference).toBeGreaterThan(1);
+  await expect(
+    page.getByRole("img", { name: /Отворена книга с печатни и ръкописни/ }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Следващи букви" }),
+  ).toHaveCount(0);
+  const canvas = page.locator("canvas");
+  await canvas.scrollIntoViewIfNeeded();
+  const box = (await canvas.boundingBox())!;
+  if (!isMobile) {
+    await page.mouse.move(box.x + 40, box.y + 40);
+    const before = await canvas.screenshot();
+    await page.mouse.move(box.x + box.width - 40, box.y + box.height - 40, {
+      steps: 8,
+    });
+    const after = await canvas.screenshot();
+    expect(after.equals(before)).toBe(false);
+    await page.waitForTimeout(300);
+    expect((await canvas.screenshot()).equals(after)).toBe(true);
+  }
+});
+
+test("book automatically turns pages, pauses and resumes on desktop and mobile", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.locator(".book-widget").scrollIntoViewIfNeeded();
+  await expect(page.locator(".book-widget")).toHaveAttribute(
+    "data-animation",
+    "playing",
+  );
+  // No click or swipe starts the animation.
+  await expect(page.locator(".book-page-label strong")).toHaveText("Мм · Рр", {
+    timeout: 8000,
+  });
+  await expect(page.locator(".book-page-label strong")).toHaveText("Сс · Яя", {
+    timeout: 8000,
+  });
+  await page.getByRole("button", { name: "Спри разлистването" }).click();
+  await expect(page.locator(".book-widget")).toHaveAttribute(
+    "data-animation",
+    "paused",
+  );
+  const paused = await page.locator(".book-page-label strong").textContent();
+  await page.waitForTimeout(4300);
+  await expect(page.locator(".book-page-label strong")).toHaveText(paused!);
+  await page.getByRole("button", { name: "Продължи разлистването" }).click();
+  await expect(page.locator(".book-page-label strong")).not.toHaveText(
+    paused!,
+    { timeout: 8000 },
+  );
+});
+
+test("reduced motion stops autoplay and the mobile book allows vertical scrolling", async ({
   page,
   context,
   isMobile,
 }) => {
-  const errors: string[] = [];
-  page.on("pageerror", (error) => errors.push(error.message));
-  await page.waitForLoadState("networkidle");
-  const canvas = page.locator("canvas");
-  await expect(canvas).toBeVisible();
-  await canvas.scrollIntoViewIfNeeded();
-  await page.waitForTimeout(900);
-  const still = await canvas.screenshot();
-  await page.waitForTimeout(300);
-  expect((await canvas.screenshot()).equals(still)).toBe(true);
-  const box = (await canvas.boundingBox())!;
-  const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+  await expect(page.locator(".book-widget")).toHaveAttribute(
+    "data-handwriting",
+    "ready",
+  );
+  const book = page.locator(".book-widget");
+  await book.scrollIntoViewIfNeeded();
+  await expect(book).toHaveAttribute("data-animation", "paused");
+  const original = await page.locator(".book-page-label strong").textContent();
+  await page.waitForTimeout(4300);
+  await expect(page.locator(".book-page-label strong")).toHaveText(original!);
   if (isMobile) {
+    const box = (await page.locator("canvas").boundingBox())!;
+    const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
+    const before = await page.evaluate(() => scrollY);
     const cdp = await context.newCDPSession(page);
-    await cdp.send("Input.dispatchTouchEvent", {
-      type: "touchStart",
-      touchPoints: [point],
-    });
-    for (let step = 1; step <= 6; step++)
-      await cdp.send("Input.dispatchTouchEvent", {
-        type: "touchMove",
-        touchPoints: [{ x: point.x - step * 12, y: point.y }],
-      });
-    await cdp.send("Input.dispatchTouchEvent", {
-      type: "touchEnd",
-      touchPoints: [],
-    });
-    await expect(page.locator(".book-page-label strong")).toHaveText("Вв · Гг");
-    const beforeScroll = await page.evaluate(() => scrollY);
     await cdp.send("Input.dispatchTouchEvent", {
       type: "touchStart",
       touchPoints: [point],
@@ -265,71 +332,40 @@ test("alphabet book responds to mouse movement and mobile page swipes", async ({
     });
     await expect
       .poll(() => page.evaluate(() => scrollY))
-      .toBeGreaterThan(beforeScroll);
-    await expect(page.locator(".book-page-label strong")).toHaveText("Вв · Гг");
-  } else {
-    await page.mouse.move(point.x - 70, point.y - 20);
-    const before = await canvas.screenshot();
-    await page.mouse.move(point.x + 70, point.y + 20, { steps: 8 });
-    const after = await canvas.screenshot();
-    expect(after.equals(before)).toBe(false);
-    await page.waitForTimeout(300);
-    expect((await canvas.screenshot()).equals(after)).toBe(true);
-    await page.getByRole("button", { name: "Следващи букви" }).click();
+      .toBeGreaterThan(before);
+    await expect(page.locator(".book-page-label strong")).toHaveText(original!);
   }
-  await expect(page.locator(".book-page-label strong")).toHaveText("Вв · Гг");
-  expect((await canvas.screenshot()).equals(still)).toBe(false);
-  expect(errors).toEqual([]);
-});
-
-test("book covers all Bulgarian letters, respects boundaries and supports keyboard", async ({
-  page,
-}) => {
-  await expect(
-    page.getByRole("button", { name: "Предишни букви" }),
-  ).toBeDisabled();
-  for (let spread = 2; spread <= 15; spread++) {
-    await page.getByRole("button", { name: "Следващи букви" }).click();
-    await expect(page.locator(".book-page-label span")).toHaveText(
-      `${spread} / 15`,
-    );
-  }
-  await expect(page.locator(".book-page-label strong")).toHaveText("Юю · Яя");
-  await expect(
-    page.getByRole("button", { name: "Следващи букви" }),
-  ).toBeDisabled();
-  await page.getByRole("button", { name: "Предишни букви" }).click();
-  await expect(page.locator(".book-page-label strong")).toHaveText("Ъъ · Ьь");
-  await expect(
-    page.getByRole("img", { name: /Отворена книга/ }),
-  ).toHaveAttribute("aria-label", /знак за мекост/);
-  await page.locator(".book-widget").focus();
-  await page.keyboard.press("ArrowLeft");
-  await expect(page.locator(".book-page-label strong")).toHaveText("Шш · Щщ");
-  await page.keyboard.press("ArrowRight");
-  await expect(page.locator(".book-page-label strong")).toHaveText("Ъъ · Ьь");
-});
-
-test("animated book page turns finish and previous page returns to the original spread", async ({
-  page,
-}) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.waitForLoadState("networkidle");
-  const book = page.locator(".book-canvas");
-  await expect(page.locator("canvas")).toBeVisible();
-  const bounds = (await book.boundingBox())!;
-  await book.click({
-    position: { x: bounds.width * 0.75, y: bounds.height / 2 },
-  });
-  await expect(page.locator(".book-page-label strong")).toHaveText("Вв · Гг");
-  await expect(
-    page.getByRole("button", { name: "Следващи букви" }),
-  ).toBeEnabled();
-  await page.getByRole("button", { name: "Предишни букви" }).click();
-  await expect(page.locator(".book-page-label strong")).toHaveText("Аа · Бб");
-  await expect(
-    page.getByRole("button", { name: "Предишни букви" }),
-  ).toBeDisabled();
+  await book.scrollIntoViewIfNeeded();
+  await expect(book).toHaveAttribute("data-animation", "playing");
+  await page.locator("#parents").scrollIntoViewIfNeeded();
+  await expect(book).toHaveAttribute("data-animation", "paused");
+});
+
+test("handwriting font can recover after a failed local font request", async ({
+  page,
+}) => {
+  let fail = true;
+  await page.route("**/fonts/MarckScript-Regular.ttf", (route) =>
+    fail ? route.abort() : route.continue(),
+  );
+  await page.reload();
+  await expect(page.locator(".book-widget")).toHaveAttribute(
+    "data-handwriting",
+    "error",
+  );
+  await expect(page.locator(".book-widget").getByRole("alert")).toContainText(
+    "Ръкописните букви не се заредиха",
+  );
+  fail = false;
+  await page
+    .getByRole("button", { name: "Опитай отново", exact: true })
+    .click();
+  await expect(page.locator(".book-widget")).toHaveAttribute(
+    "data-handwriting",
+    "ready",
+  );
+  await expect(page.locator(".book-font-error")).toHaveCount(0);
 });
 
 test("layout fits small phones, tablets and desktop screens", async ({

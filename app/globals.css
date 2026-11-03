@@ -216,15 +216,15 @@ h1 > span {
 .book-canvas {
   height: 460px;
   width: 100%;
-  cursor: grab;
+  cursor: default;
   position: relative;
   z-index: 1;
 }
 .book-canvas:active {
-  cursor: grabbing;
+  cursor: default;
 }
 canvas {
-  touch-action: pan-y;
+  touch-action: pan-y pinch-zoom;
 }
 .book-halo {
   position: absolute;
@@ -1198,7 +1198,7 @@ h2 span {
   border-radius: 18px;
 }
 .book-canvas {
-  touch-action: pan-y;
+  touch-action: pan-y pinch-zoom;
 }
 .book-controls {
   display: flex;
@@ -1253,6 +1253,33 @@ h2 span {
   color: var(--muted);
   line-height: 1.7;
 }
+.book-writing-note {
+  margin: 10px auto 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--purple);
+}
+.book-font-error {
+  max-width: 300px;
+  margin: 10px auto;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #92384a;
+}
+.book-font-error button {
+  display: block;
+  margin: 6px auto 0;
+  min-height: 44px;
+  padding: 8px 16px;
+  border: 1px solid currentColor;
+  border-radius: 20px;
+}
+.handwriting-preview {
+  font-family: "Malki Handwriting", cursive;
+  font-size: 48px !important;
+  line-height: 1.5;
+}
 .book-loading {
   height: 550px;
   display: flex;
@@ -1275,4 +1302,12 @@ h2 span {
   .book-hint {
     font-size: 10px;
   }
+}
+
+.book-controls button.book-pause {
+  width: auto;
+  min-width: 72px;
+  padding: 8px 16px;
+  border-radius: 24px;
+  font-size: 12px;
 }
