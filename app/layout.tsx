@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import "./globals.css";
 export const metadata: Metadata = {
-  title: "Digital Studio — Дигитални идеи в движение",
-  description: "Интерактивно дигитално студио с оригинална 3D скулптура.",
+  title: "Малки стъпки — Големи открития за 1. клас",
+  description:
+    "Букви, числа и светът около нас. Спокойни образователни игри за първокласници — без регистрация, с насърчение и в собствено темпо.",
 };
 export default function RootLayout({
   children,
