@@ -635,6 +635,9 @@ h2 span {
   border-radius: 5px;
 }
 .question-visual {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
   background: var(--tint);
   color: var(--tone);
   display: inline-flex;
@@ -1115,6 +1118,9 @@ h2 span {
     font-size: 19px;
   }
   .question-visual {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: center;
     font-size: 27px;
     padding-inline: 22px;
   }

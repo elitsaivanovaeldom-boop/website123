@@ -1,5 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { globeLabels, globePoint } from "../lib/earth-globe";
+import { questions } from "../lib/learning-content";
+import { literacyQuestions } from "../lib/literacy";
 
 test.beforeEach(async ({ page }) => {
   // The learning games and procedural model must work without a third-party CDN.
@@ -18,9 +20,9 @@ test("all three subjects support retry, completion and restarting", async ({
   page.on("pageerror", (error) => errors.push(error.message));
   await page.getByRole("link", { name: "Да опитаме заедно" }).click();
   for (const [title, answers] of [
-    ["Букви и думи", [1, 0, 1, 2]],
-    ["Числа и смятане", [1, 0, 2, 1]],
-    ["Светът около нас", [1, 0, 1, 2]],
+    ["Букви и думи", [1, 0, 1, 2, 0, 1, 2, 1, 0, 2, 2, 0]],
+    ["Числа и смятане", [1, 0, 2, 1, 1, 2, 0, 2, 1, 0, 2, 0]],
+    ["Светът около нас", [1, 0, 1, 2, 1, 2, 0, 2, 1, 0, 2, 0]],
   ] as const) {
     await page.getByRole("button", { name: title, exact: true }).click();
     await expect(page.getByRole("progressbar")).toHaveAttribute(
@@ -36,6 +38,9 @@ test("all three subjects support retry, completion and restarting", async ({
       "0",
     );
     for (const [index, answer] of answers.entries()) {
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth),
+      ).toBeLessThanOrEqual(page.viewportSize()!.width);
       await page.locator(".answer").nth(answer).click();
       await expect(page.getByRole("progressbar")).toHaveAttribute(
         "aria-valuenow",
@@ -44,12 +49,12 @@ test("all three subjects support retry, completion and restarting", async ({
       await expect(page.locator(".answer").first()).toBeDisabled();
       await page
         .getByRole("button", {
-          name: index === 3 ? "Виж как се справи" : "Следващо откритие",
+          name: index === 11 ? "Виж как се справи" : "Следващо откритие",
         })
         .click();
     }
     await expect(
-      page.getByRole("heading", { name: "Четири малки победи!" }),
+      page.getByRole("heading", { name: "Браво! 12 малки победи!" }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Да опитаме пак" }).click();
     await expect(page.getByRole("progressbar")).toHaveAttribute(
@@ -128,9 +133,20 @@ test("sound models teach vowel/consonant patterns and restart in the same mode",
       ["МАМА", 1, 2, 2],
       ["РИБА", 2, 2, 2],
       ["ЛИМОН", 3, 2, 3],
+      ["СОМ", 1, 1, 2],
+      ["ОКО", 3, 2, 1],
+      ["СТОЛ", 2, 1, 3],
+      ["КОТКА", 1, 2, 3],
+      ["ИГЛА", 3, 2, 2],
+      ["КОЛЕЛО", 2, 3, 3],
+      ["КРАК", 1, 1, 3],
+      ["ТРЕВА", 3, 2, 3],
     ] as const
   ).entries()) {
     await expect(page.locator(".question-visual")).toHaveText(word);
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(page.viewportSize()!.width);
     await page
       .getByRole("button", { name: new RegExp(`^Модел ${model}:`) })
       .click();
@@ -144,12 +160,12 @@ test("sound models teach vowel/consonant patterns and restart in the same mode",
     );
     await page
       .getByRole("button", {
-        name: index === 3 ? "Виж как се справи" : "Следващо откритие",
+        name: index === 11 ? "Виж как се справи" : "Следващо откритие",
       })
       .click();
   }
   await expect(
-    page.getByRole("heading", { name: "Четири малки победи!" }),
+    page.getByRole("heading", { name: "Браво! 12 малки победи!" }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Да опитаме пак" }).click();
   await expect(
@@ -177,8 +193,19 @@ test("syllables count one to four parts and mode changes reset feedback", async 
       ["2", ["МА", "МА"]],
       ["3", ["МА", "ЛИ", "НА"]],
       ["4", ["ПЕ", "ПЕ", "РУ", "ДА"]],
+      ["1", ["КОН"]],
+      ["2", ["РИ", "БА"]],
+      ["3", ["КО", "ЛЕ", "ЛО"]],
+      ["2", ["БА", "НАН"]],
+      ["3", ["РА", "КЕ", "ТА"]],
+      ["2", ["МО", "РЕ"]],
+      ["3", ["СА", "МО", "ЛЕТ"]],
+      ["4", ["ТЕ", "МЕ", "НУ", "ГА"]],
     ] as const
   ).entries()) {
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(page.viewportSize()!.width);
     await page.getByRole("button", { name: answer, exact: true }).click();
     await expect(page.locator(".syllable-breakdown > span")).toHaveCount(
       syllables.length,
@@ -189,7 +216,7 @@ test("syllables count one to four parts and mode changes reset feedback", async 
       ).toContainText(syllable);
     await page
       .getByRole("button", {
-        name: index === 3 ? "Виж как се справи" : "Следващо откритие",
+        name: index === 11 ? "Виж как се справи" : "Следващо откритие",
       })
       .click();
   }
@@ -215,6 +242,53 @@ test("syllables count one to four parts and mode changes reset feedback", async 
   await expect(
     page.getByRole("button", { name: "Букви", exact: true }),
   ).toHaveAttribute("aria-pressed", "true");
+});
+
+test("all 60 examples have valid answers, sound models and syllable divisions", () => {
+  const banks = [
+    ...Object.values(questions),
+    ...Object.values(literacyQuestions),
+  ];
+  expect(banks.map((bank) => bank.length)).toEqual([12, 12, 12, 12, 12]);
+  for (const bank of banks) {
+    expect(new Set(bank.map((question) => question.prompt)).size).toBe(
+      bank.length,
+    );
+    for (const question of bank) {
+      expect(question.choices).toHaveLength(3);
+      expect(new Set(question.choices).size).toBe(3);
+      expect(question.correct).toBeGreaterThanOrEqual(0);
+      expect(question.correct).toBeLessThan(3);
+      expect(question.hint.length).toBeGreaterThan(10);
+      expect(question.explanation.length).toBeGreaterThan(10);
+    }
+  }
+  for (const question of literacyQuestions.sounds) {
+    expect(question.visual).not.toMatch(/[ЩЬЮЯ]/);
+    const model = [...question.visual]
+      .map((letter) => (/[АЪОУЕИ]/.test(letter) ? "Г" : "С"))
+      .join("");
+    expect(question.choices[question.correct]).toBe(model);
+    for (const choice of question.choices)
+      expect(choice).toMatch(new RegExp(`^[ГС]{${question.visual.length}}$`));
+  }
+  for (const question of literacyQuestions.syllables) {
+    expect(question.syllables!.join("")).toBe(question.visual);
+    expect(question.choices[question.correct]).toBe(
+      String(question.syllables!.length),
+    );
+    for (const syllable of question.syllables!)
+      expect(syllable.match(/[АЪОУЕИ]/g)).toHaveLength(1);
+  }
+  for (const question of questions.numbers) {
+    const equation = question.visual.match(/^(\d+) ([+−-]) (\d+) = \?$/);
+    if (!equation) continue;
+    const result =
+      equation[2] === "+"
+        ? Number(equation[1]) + Number(equation[3])
+        : Number(equation[1]) - Number(equation[3]);
+    expect(question.choices[question.correct]).toBe(String(result));
+  }
 });
 
 test("Earth globe separates numbers and Bulgarian letters at the equator", async ({
