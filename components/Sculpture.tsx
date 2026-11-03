@@ -1,7 +1,6 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Float } from "@react-three/drei";
 import {
   useEffect,
   useMemo,
@@ -33,6 +32,25 @@ function segmentGeometry(lines: [number, number, number][][]) {
 }
 
 function GlobeSymbol({ label }: { label: (typeof globeLabels)[number] }) {
+  const sprite = useRef<THREE.Sprite>(null);
+  const vectors = useMemo(
+    () => ({
+      point: new THREE.Vector3(),
+      center: new THREE.Vector3(),
+      normal: new THREE.Vector3(),
+      view: new THREE.Vector3(),
+    }),
+    [],
+  );
+  useFrame(({ camera }) => {
+    if (!sprite.current?.parent) return;
+    sprite.current.getWorldPosition(vectors.point);
+    sprite.current.parent.getWorldPosition(vectors.center);
+    vectors.normal.copy(vectors.point).sub(vectors.center).normalize();
+    camera.getWorldPosition(vectors.view);
+    vectors.view.sub(vectors.point).normalize();
+    sprite.current.visible = vectors.normal.dot(vectors.view) > 0.12;
+  });
   const texture = useMemo(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 128;
@@ -58,23 +76,22 @@ function GlobeSymbol({ label }: { label: (typeof globeLabels)[number] }) {
     label.latitude,
     GLOBE_RADIUS + 0.045,
   );
-  const rotation = new THREE.Euler(
-    (-label.latitude * Math.PI) / 180,
-    ((label.longitude - 20) * Math.PI) / 180,
-    0,
-    "YXZ",
-  );
   return (
-    <mesh position={position} rotation={rotation}>
-      <planeGeometry args={[0.27, 0.34]} />
-      <meshBasicMaterial
+    <sprite
+      ref={sprite}
+      position={position}
+      scale={[0.27, 0.34, 1]}
+      renderOrder={2}
+    >
+      <spriteMaterial
         map={texture}
         transparent
         alphaTest={0.05}
+        depthTest={false}
         depthWrite={false}
         toneMapped={false}
       />
-    </mesh>
+    </sprite>
   );
 }
 
@@ -227,18 +244,23 @@ interface Drag {
 function PlayfulFigure({
   rotation,
   dragging,
-  automatic,
+  motion,
 }: {
   rotation: MutableRefObject<Rotation>;
   dragging: MutableRefObject<Drag | null>;
-  automatic: boolean;
+  motion: MutableRefObject<boolean>;
 }) {
   const figure = useRef<THREE.Group>(null);
+  const floatTime = useRef(0);
   useFrame((_, delta) => {
     if (!figure.current) return;
-    if (automatic && !dragging.current)
-      rotation.current.y += Math.min(delta, 0.05) * 0.1;
-    if (!automatic)
+    if (motion.current && !dragging.current) {
+      const step = Math.min(delta, 0.05);
+      rotation.current.y += step * 0.1;
+      floatTime.current += step;
+      figure.current.position.y = Math.sin(floatTime.current * 0.8) * 0.025;
+    }
+    if (!motion.current)
       figure.current.rotation.set(rotation.current.x, rotation.current.y, 0);
     else {
       figure.current.rotation.x = THREE.MathUtils.damp(
@@ -256,7 +278,7 @@ function PlayfulFigure({
     }
   });
   return (
-    <group ref={figure} rotation={[0.15, 0, 0]}>
+    <group ref={figure} rotation={[0, 0, 0]}>
       <GlobeSurface />
     </group>
   );
@@ -268,12 +290,14 @@ export default function Sculpture() {
   const [visible, setVisible] = useState(false);
   const [tabVisible, setTabVisible] = useState(true);
   const [webgl, setWebgl] = useState<boolean | null>(null);
-  const rotation = useRef<Rotation>({ x: 0.15, y: 0 });
+  const rotation = useRef<Rotation>({ x: 0, y: 0 });
   const dragging = useRef<Drag | null>(null);
   const widget = useRef<HTMLDivElement>(null);
   const fallback = useRef<SVGSVGElement>(null);
   const automatic =
     visible && tabVisible && !reduced && !paused && webgl === true;
+  const motion = useRef(automatic);
+  motion.current = automatic;
 
   function syncFallback() {
     if (fallback.current)
@@ -365,7 +389,7 @@ export default function Sculpture() {
           )
         ) {
           event.preventDefault();
-          if (event.key === "Home") rotation.current = { x: 0.15, y: 0 };
+          if (event.key === "Home") rotation.current = { x: 0, y: 0 };
           else if (event.key === "ArrowLeft" || event.key === "ArrowRight")
             rotation.current.y += event.key === "ArrowRight" ? 0.25 : -0.25;
           else
@@ -412,18 +436,11 @@ export default function Sculpture() {
               intensity={1.2}
               color="#ffe0bb"
             />
-            <Float
-              enabled={automatic}
-              speed={0.8}
-              rotationIntensity={0.025}
-              floatIntensity={0.1}
-            >
-              <PlayfulFigure
-                rotation={rotation}
-                dragging={dragging}
-                automatic={automatic}
-              />
-            </Float>
+            <PlayfulFigure
+              rotation={rotation}
+              dragging={dragging}
+              motion={motion}
+            />
           </Canvas>
         ) : webgl === false ? (
           <GlobeFallback svgRef={fallback} />

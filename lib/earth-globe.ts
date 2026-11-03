@@ -21,14 +21,14 @@ export const globeLabels = [
     hemisphere: "north" as const,
     longitude:
       CENTER_LONGITUDE + (index % 5) * 72 - 144 + (index >= 5 ? 36 : 0),
-    latitude: index < 5 ? 52 : 25,
+    latitude: index < 5 ? 45 : 25,
   })),
   ...Array.from("ГДАЕЖЗБВИЙ", (text, index) => ({
     text,
     hemisphere: "south" as const,
     longitude:
       CENTER_LONGITUDE + (index % 5) * 72 - 144 + (index >= 5 ? 36 : 0),
-    latitude: index < 5 ? -25 : -52,
+    latitude: index < 5 ? -25 : -45,
   })),
 ];
 
