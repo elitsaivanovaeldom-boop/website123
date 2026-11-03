@@ -136,10 +136,22 @@ test("fine-line planet renders, respects reduced motion and supports drag", asyn
       touchPoints: [],
     });
   } else {
+    // Reduced motion stops idle animation, so only mouse movement can change this image.
+    await page.mouse.move(point.x - 70, point.y - 20);
+    await page.waitForTimeout(200);
+    const beforeHover = await canvas.screenshot();
+    await page.mouse.move(point.x + 70, point.y + 20, { steps: 8 });
+    await page.waitForTimeout(200);
+    const afterHover = await canvas.screenshot();
+    expect(afterHover.equals(beforeHover)).toBe(false);
+    await page.waitForTimeout(400);
+    expect((await canvas.screenshot()).equals(afterHover)).toBe(true);
     await page.mouse.move(point.x, point.y);
+    const beforeDrag = await canvas.screenshot();
     await page.mouse.down();
     await page.mouse.move(point.x + 90, point.y + 20, { steps: 8 });
     await page.mouse.up();
+    expect((await canvas.screenshot()).equals(beforeDrag)).toBe(false);
   }
   await page.waitForTimeout(900);
   expect((await canvas.screenshot()).equals(still)).toBe(false);

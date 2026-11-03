@@ -133,7 +133,8 @@ export default function Home() {
             </span>
             <Sculpture />
             <span className="planet-caption">
-              <span aria-hidden="true">↔</span> Завърти своята малка вселена
+              <span aria-hidden="true">↔</span> Движи мишката или плъзни с
+              пръст
             </span>
             <span className="art-note">
               Всяко „защо?“
