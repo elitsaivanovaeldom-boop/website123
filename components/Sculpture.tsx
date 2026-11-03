@@ -11,336 +11,424 @@ import {
   type MutableRefObject,
 } from "react";
 import * as THREE from "three";
-import { alphabet, spreadCount } from "@/lib/alphabet";
+import {
+  pencilLessons,
+  WRITING_SECONDS,
+  PICTURE_SECONDS,
+  LESSON_SECONDS,
+  type DrawingPhase,
+  type PencilLesson,
+} from "@/lib/pencil-lessons";
 
-const PAGE_WIDTH = 1.48;
-const PAGE_HEIGHT = 2.05;
+interface Point {
+  x: number;
+  y: number;
+}
+interface Stroke {
+  points: Point[];
+  length: number;
+}
 
-function createPageTexture(index: number, handwritingReady: boolean) {
-  const [letter, word] = alphabet[index];
+function samplePaths(paths: string[]): Stroke[] {
+  return paths.map((definition) => {
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", definition);
+    const length = path.getTotalLength();
+    const steps = Math.max(2, Math.ceil(length / 2));
+    return {
+      length,
+      points: Array.from({ length: steps + 1 }, (_, index) => {
+        const point = path.getPointAtLength((index / steps) * length);
+        return { x: point.x, y: point.y };
+      }),
+    };
+  });
+}
+
+function trace(
+  context: CanvasRenderingContext2D,
+  strokes: Stroke[],
+  progress: number,
+  color: string,
+  width: number,
+): Point {
+  let remaining =
+    strokes.reduce((sum, stroke) => sum + stroke.length, 0) *
+    THREE.MathUtils.clamp(progress, 0, 1);
+  let tip = strokes[0].points[0];
+  context.strokeStyle = color;
+  context.lineWidth = width;
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  for (const stroke of strokes) {
+    if (remaining <= 0) break;
+    const fraction = Math.min(remaining / stroke.length, 1);
+    const position = fraction * (stroke.points.length - 1);
+    const whole = Math.floor(position);
+    context.beginPath();
+    context.moveTo(stroke.points[0].x, stroke.points[0].y);
+    for (let index = 1; index <= whole; index++)
+      context.lineTo(stroke.points[index].x, stroke.points[index].y);
+    tip = stroke.points[whole];
+    if (whole < stroke.points.length - 1) {
+      const next = stroke.points[whole + 1];
+      tip = {
+        x: THREE.MathUtils.lerp(tip.x, next.x, position - whole),
+        y: THREE.MathUtils.lerp(tip.y, next.y, position - whole),
+      };
+      context.lineTo(tip.x, tip.y);
+    }
+    context.stroke();
+    remaining -= stroke.length;
+  }
+  return tip;
+}
+
+function makeDrawing(lesson: PencilLesson) {
   const canvas = document.createElement("canvas");
   canvas.width = 768;
-  canvas.height = 1024;
-  const context = canvas.getContext("2d")!;
-  const accent = index % 2 === 0 ? "#7760b4" : "#4e8a75";
-  context.fillStyle = "#fffdf4";
-  context.fillRect(0, 0, 768, 1024);
-  const shadow = context.createLinearGradient(0, 0, 768, 0);
-  shadow.addColorStop(0, index % 2 ? "#ded5c655" : "#ffffff00");
-  shadow.addColorStop(1, index % 2 ? "#ffffff00" : "#ded5c655");
-  context.fillStyle = shadow;
-  context.fillRect(0, 0, 768, 1024);
+  canvas.height = 576;
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.generateMipmaps = false;
+  texture.minFilter = THREE.LinearFilter;
+  return {
+    canvas,
+    context: canvas.getContext("2d")!,
+    texture,
+    handwriting: samplePaths(lesson.handwriting),
+    picture: samplePaths(lesson.picture),
+  };
+}
+
+function paintDrawing(
+  drawing: ReturnType<typeof makeDrawing>,
+  lesson: PencilLesson,
+  elapsed: number,
+) {
+  const { context } = drawing;
+  const writing = Math.min(elapsed / WRITING_SECONDS, 1);
+  const picture = THREE.MathUtils.clamp(
+    (elapsed - WRITING_SECONDS) / PICTURE_SECONDS,
+    0,
+    1,
+  );
+  context.fillStyle = "#fffdf5";
+  context.fillRect(0, 0, 768, 576);
   context.textAlign = "center";
-  context.fillStyle = "#968c9e";
-  context.font = "24px Arial, sans-serif";
-  context.fillText("МОЯТА ВЪЛШЕБНА КНИЖКА", 384, 86);
-  context.strokeStyle = "#e8e0d3";
-  context.lineWidth = 2;
-  context.beginPath();
-  context.moveTo(76, 120);
-  context.lineTo(692, 120);
-  context.stroke();
-
-  // Both typefaces are rendered locally; handwriting waits for the bundled font.
-  context.fillStyle = "#968c9e";
-  context.font = "24px Arial, sans-serif";
-  context.fillText("ПЕЧАТНИ БУКВИ", 384, 176);
-  context.fillStyle = index % 2 ? "#e3eee4" : "#eee6f8";
-  context.beginPath();
-  context.arc(384, 290, 125, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = accent;
-  context.font = "bold 180px Arial, sans-serif";
-  context.fillText(letter + letter.toLocaleLowerCase("bg"), 384, 355);
-
-  context.fillStyle = "#968c9e";
-  context.font = "24px Arial, sans-serif";
-  context.fillText("РЪКОПИСНИ БУКВИ", 384, 452);
-  for (const [line, y] of [490, 570, 670, 730].entries()) {
-    context.strokeStyle = line === 2 ? "#b6a7ce" : "#e5dcee";
-    context.setLineDash(line === 1 ? [8, 8] : []);
+  context.fillStyle = "#8b7a9e";
+  context.font = "bold 15px Arial, sans-serif";
+  context.fillText("ЕДНА БУКВА. ЕДНО ОТКРИТИЕ.", 384, 47);
+  context.font = "14px Arial, sans-serif";
+  context.fillStyle = "#8e809b";
+  context.fillText("РЪКОПИСНО", 235, 106);
+  context.lineWidth = 1;
+  for (const y of [170, 257, 346, 374]) {
+    context.strokeStyle = y === 346 ? "#bba8d4" : "#e8dfef";
+    context.setLineDash(y === 257 ? [5, 6] : []);
     context.beginPath();
-    context.moveTo(100, y);
-    context.lineTo(668, y);
+    context.moveTo(72, y);
+    context.lineTo(410, y);
     context.stroke();
   }
   context.setLineDash([]);
-  context.fillStyle = accent;
-  if (handwritingReady) {
-    context.font = '220px "Malki Handwriting"';
-    context.fillText(letter + letter.toLocaleLowerCase("bg"), 384, 670);
-  } else {
-    context.font = "24px Arial, sans-serif";
-    context.fillText("Зареждане на ръкописните букви…", 384, 610);
-  }
-
-  context.fillStyle = "#453d57";
-  context.font = "bold 50px Arial, sans-serif";
-  context.fillText(word, 384, 825);
-  context.fillStyle = "#8e8194";
-  context.font = "29px Arial, sans-serif";
-  context.fillText(`${letter} като ${word.toLocaleLowerCase("bg")}`, 384, 880);
-
-  for (let dot = 0; dot < 5; dot++) {
-    context.fillStyle = [accent, "#dba67c", "#b5c79a", "#d7c6e9", "#9fc6bb"][
-      dot
-    ];
+  const letterTip = trace(context, drawing.handwriting, writing, "#7860b3", 5);
+  if (writing === 1) {
+    context.fillStyle = "#eee7f8";
     context.beginPath();
-    context.arc(
-      284 + dot * 50,
-      920,
-      dot === index % 5 ? 12 : 6,
-      0,
-      Math.PI * 2,
-    );
+    context.roundRect(495, 83, 155, 124, 20);
     context.fill();
+    context.fillStyle = "#867494";
+    context.font = "12px Arial, sans-serif";
+    context.fillText("ПЕЧАТНО", 572, 109);
+    context.fillStyle = "#7760b3";
+    context.font = "bold 66px Arial, sans-serif";
+    context.fillText(
+      lesson.letter + lesson.letter.toLocaleLowerCase("bg"),
+      572,
+      179,
+    );
   }
-  context.fillStyle = "#a79aa9";
-  context.font = "24px Arial, sans-serif";
-  context.fillText(String(index + 1).padStart(2, "0"), 384, 981);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
-  return texture;
+  if (picture === 1) {
+    context.fillStyle = lesson.pictureKind === "bus" ? "#dfeee2" : "#f8dfc7";
+    context.fill(new Path2D(lesson.picture[0]));
+    if (lesson.pictureKind === "bus") {
+      context.fillStyle = "#fffdf5";
+      for (const windowPath of lesson.picture.slice(1, 4))
+        context.fill(new Path2D(windowPath));
+    }
+  }
+  const pictureTip = trace(
+    context,
+    drawing.picture,
+    picture,
+    lesson.pictureKind === "bus" ? "#548c76" : "#bd8456",
+    4,
+  );
+  if (writing === 1) {
+    context.fillStyle = "#63566f";
+    context.font = "bold 25px Arial, sans-serif";
+    context.fillText(`${lesson.letter} като ${lesson.word}`, 384, 495);
+    context.font = "14px Arial, sans-serif";
+    context.fillStyle = "#96889f";
+    context.fillText("С малки линии започват големите открития.", 384, 530);
+  }
+  drawing.texture.needsUpdate = true;
+  return {
+    tip:
+      writing < 1 ? letterTip : picture < 1 ? pictureTip : { x: 635, y: 230 },
+    phase: (writing < 1
+      ? "writing"
+      : picture < 1
+        ? "picture"
+        : "complete") as DrawingPhase,
+  };
 }
 
-function PageSurface({
-  index,
-  side = "right",
-  back = false,
-  handwritingReady,
-}: {
-  index: number;
-  side?: "left" | "right" | "turning";
-  back?: boolean;
-  handwritingReady: boolean;
-}) {
-  const texture = useMemo(
-    () => createPageTexture(index, handwritingReady),
-    [index, handwritingReady],
-  );
-  const geometry = useMemo(() => {
-    const plane = new THREE.PlaneGeometry(PAGE_WIDTH, PAGE_HEIGHT, 24, 1);
-    const positions = plane.attributes.position;
-    const uv = plane.attributes.uv;
-    for (let point = 0; point < positions.count; point++) {
-      const u = uv.getX(point);
-      positions.setZ(point, Math.sin(u * Math.PI) * 0.035);
-      if (back) uv.setX(point, 1 - u);
-    }
-    if (side === "turning") plane.translate(PAGE_WIDTH / 2, 0, 0);
-    plane.computeVertexNormals();
-    return plane;
-  }, [side, back]);
-  useEffect(() => () => texture.dispose(), [texture]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
+function Pencil() {
   return (
-    <mesh
-      geometry={geometry}
-      position={
-        side === "turning"
-          ? [0, 0, 0]
-          : [side === "left" ? -0.76 : 0.76, 0, 0.09]
-      }
-    >
-      <meshBasicMaterial
-        map={texture}
-        toneMapped={false}
-        side={back ? THREE.BackSide : THREE.FrontSide}
-      />
-    </mesh>
-  );
-}
-
-type Flip = { direction: 1 | -1; target: number };
-
-function TurningPage({
-  spread,
-  flip,
-  onComplete,
-  handwritingReady,
-}: {
-  spread: number;
-  flip: Flip;
-  onComplete: () => void;
-  handwritingReady: boolean;
-}) {
-  const page = useRef<THREE.Group>(null);
-  const elapsed = useRef(0);
-  const completed = useRef(false);
-  useFrame((_, delta) => {
-    if (!page.current || completed.current) return;
-    elapsed.current += delta;
-    const progress = Math.min(elapsed.current / 0.9, 1);
-    const eased = progress * progress * (3 - 2 * progress);
-    page.current.rotation.y =
-      flip.direction === 1 ? -Math.PI * eased : -Math.PI * (1 - eased);
-    if (progress === 1) {
-      completed.current = true;
-      onComplete();
-    }
-  });
-  const front = flip.direction === 1 ? spread * 2 + 1 : flip.target * 2 + 1;
-  const back = flip.direction === 1 ? flip.target * 2 : spread * 2;
-  return (
-    <group
-      ref={page}
-      position={[0, 0, 0.15]}
-      rotation={[0, flip.direction === 1 ? 0 : -Math.PI, 0]}
-    >
-      <PageSurface
-        index={front}
-        side="turning"
-        handwritingReady={handwritingReady}
-      />
-      <PageSurface
-        index={back}
-        side="turning"
-        back
-        handwritingReady={handwritingReady}
-      />
+    <group rotation={[0.58, 0, -0.43]}>
+      <mesh position={[0, 0.055, 0]} rotation={[0, 0, Math.PI]}>
+        <coneGeometry args={[0.034, 0.11, 10]} />
+        <meshStandardMaterial color="#43404d" roughness={0.85} />
+      </mesh>
+      <mesh position={[0, 0.23, 0]} rotation={[0, 0, Math.PI]}>
+        <coneGeometry args={[0.105, 0.36, 12]} />
+        <meshStandardMaterial color="#dbb58c" roughness={0.8} />
+      </mesh>
+      <mesh position={[0, 0.98, 0]}>
+        <cylinderGeometry args={[0.105, 0.105, 1.18, 6]} />
+        <meshStandardMaterial color="#efc46c" roughness={0.48} flatShading />
+      </mesh>
+      <mesh position={[0, 1.6, 0]}>
+        <cylinderGeometry args={[0.111, 0.111, 0.16, 12]} />
+        <meshStandardMaterial
+          color="#b8c6c6"
+          metalness={0.6}
+          roughness={0.32}
+        />
+      </mesh>
+      <mesh position={[0, 1.77, 0]}>
+        <capsuleGeometry args={[0.105, 0.17, 5, 12]} />
+        <meshStandardMaterial color="#c5b1df" roughness={0.75} />
+      </mesh>
     </group>
   );
 }
 
-function BookModel({
-  spread,
-  flip,
-  onComplete,
+function DrawingScene({
+  lesson,
+  automatic,
   reduced,
   pointer,
-  handwritingReady,
+  onPhase,
+  onNext,
 }: {
-  spread: number;
-  flip: Flip | null;
-  onComplete: () => void;
+  lesson: PencilLesson;
+  automatic: boolean;
   reduced: boolean;
-  pointer: MutableRefObject<{ x: number; y: number }>;
-  handwritingReady: boolean;
+  pointer: MutableRefObject<Point>;
+  onPhase: (phase: DrawingPhase) => void;
+  onNext: () => void;
 }) {
-  const book = useRef<THREE.Group>(null);
+  const scene = useRef<THREE.Group>(null);
+  const pencil = useRef<THREE.Group>(null);
+  const drawing = useMemo(() => makeDrawing(lesson), [lesson]);
+  const current = useRef<typeof drawing | null>(null);
+  const elapsed = useRef(0);
+  const lastPaint = useRef(-1);
+  const lastPhase = useRef<DrawingPhase | null>(null);
+  const finished = useRef(false);
+  const lastTick = useRef<number | null>(null);
+  useEffect(() => () => drawing.texture.dispose(), [drawing]);
+  useEffect(() => {
+    lastTick.current = null;
+  }, [automatic]);
+
   useFrame((_, delta) => {
-    if (!book.current) return;
-    const x = 0.28 + pointer.current.y * 0.18;
-    const y = -0.24 + pointer.current.x * 0.4;
-    if (reduced) book.current.rotation.set(x, y, -0.06);
+    if (!scene.current || !pencil.current) return;
+    if (current.current !== drawing) {
+      current.current = drawing;
+      elapsed.current = 0;
+      lastPaint.current = -1;
+      lastPhase.current = null;
+      finished.current = false;
+      lastTick.current = null;
+    }
+    const x = -0.08 + pointer.current.y * 0.14;
+    const y = -0.1 + pointer.current.x * 0.24;
+    if (!automatic) scene.current.rotation.set(x, y, -0.025);
     else {
-      book.current.rotation.x = THREE.MathUtils.damp(
-        book.current.rotation.x,
+      scene.current.rotation.x = THREE.MathUtils.damp(
+        scene.current.rotation.x,
         x,
         6,
         delta,
       );
-      book.current.rotation.y = THREE.MathUtils.damp(
-        book.current.rotation.y,
+      scene.current.rotation.y = THREE.MathUtils.damp(
+        scene.current.rotation.y,
         y,
         6,
         delta,
       );
     }
+    if (automatic) {
+      const now = performance.now();
+      if (lastTick.current !== null)
+        elapsed.current += (now - lastTick.current) / 1000;
+      lastTick.current = now;
+    } else lastTick.current = null;
+    const time = reduced ? LESSON_SECONDS : elapsed.current;
+    // Limit texture uploads to 24 fps on mobile, while the 3D pencil remains lightweight.
+    if (lastPaint.current < 0 || Math.abs(time - lastPaint.current) >= 1 / 24) {
+      const { tip, phase } = paintDrawing(drawing, lesson, time);
+      pencil.current.position.set(
+        (tip.x / 768 - 0.5) * 4,
+        (0.5 - tip.y / 576) * 3,
+        0.045,
+      );
+      if (phase !== lastPhase.current) {
+        lastPhase.current = phase;
+        onPhase(phase);
+      }
+      lastPaint.current = time;
+    }
+    if (automatic && elapsed.current >= LESSON_SECONDS && !finished.current) {
+      finished.current = true;
+      onNext();
+    }
   });
-  const left = flip?.direction === -1 ? flip.target * 2 : spread * 2;
-  const right = flip?.direction === 1 ? flip.target * 2 + 1 : spread * 2 + 1;
+
   return (
-    <group ref={book} rotation={[0.28, -0.24, -0.06]}>
-      {([-1, 1] as const).map((side) => (
-        <group key={side}>
-          <RoundedBox
-            args={[1.64, 2.24, 0.16]}
-            radius={0.045}
-            smoothness={3}
-            position={[side * 0.78, 0, -0.14]}
-          >
-            <meshStandardMaterial
-              color={side === -1 ? "#91bba6" : "#9b81c3"}
-              roughness={0.65}
-            />
-          </RoundedBox>
-          {[0, 1, 2, 3].map((layer) => (
-            <mesh
-              key={layer}
-              position={[side * 0.76, 0, -0.037 + layer * 0.025]}
-            >
-              <boxGeometry args={[1.49, 2.065, 0.018]} />
-              <meshStandardMaterial
-                color={layer % 2 ? "#eee5d4" : "#fff9e9"}
-                roughness={1}
-              />
-            </mesh>
-          ))}
-        </group>
-      ))}
+    <group
+      ref={scene}
+      position={[0, -0.17, 0]}
+      rotation={[-0.08, -0.1, -0.025]}
+    >
       <RoundedBox
-        args={[0.13, 2.25, 0.18]}
-        position={[0, 0, -0.08]}
-        radius={0.04}
+        args={[4.18, 3.18, 0.12]}
+        radius={0.12}
         smoothness={3}
+        position={[0, 0, -0.11]}
       >
-        <meshStandardMaterial color="#d3a172" />
+        <meshStandardMaterial color="#dfcfb5" roughness={0.8} />
       </RoundedBox>
-      <mesh position={[0.62, -1.15, -0.085]}>
-        <boxGeometry args={[0.16, 0.5, 0.012]} />
-        <meshStandardMaterial color="#6ca891" />
+      <RoundedBox
+        args={[4.04, 3.04, 0.055]}
+        radius={0.07}
+        smoothness={3}
+        position={[0, 0, -0.025]}
+      >
+        <meshStandardMaterial color="#fffcf0" roughness={0.9} />
+      </RoundedBox>
+      <mesh position={[0, 0, 0.008]}>
+        <planeGeometry args={[4, 3]} />
+        <meshBasicMaterial map={drawing.texture} toneMapped={false} />
       </mesh>
-      <PageSurface
-        index={left}
-        side="left"
-        handwritingReady={handwritingReady}
-      />
-      <PageSurface index={right} handwritingReady={handwritingReady} />
-      {flip && (
-        <TurningPage
-          key={`${spread}-${flip.direction}`}
-          spread={spread}
-          flip={flip}
-          onComplete={onComplete}
-          handwritingReady={handwritingReady}
-        />
-      )}
+      <group ref={pencil}>
+        <Pencil />
+      </group>
+      <RoundedBox
+        args={[0.52, 0.28, 0.2]}
+        radius={0.045}
+        smoothness={3}
+        position={[-1.55, -1.68, 0.11]}
+        rotation={[0, 0, 0.18]}
+      >
+        <meshStandardMaterial color="#b5cdbb" roughness={0.8} />
+      </RoundedBox>
     </group>
   );
 }
 
+function DrawingFallback({
+  lesson,
+  automatic,
+  onNext,
+  onPhase,
+}: {
+  lesson: PencilLesson;
+  automatic: boolean;
+  onNext: () => void;
+  onPhase: (phase: DrawingPhase) => void;
+}) {
+  useEffect(() => {
+    onPhase("complete");
+    if (!automatic) return;
+    const timer = window.setTimeout(onNext, LESSON_SECONDS * 1000);
+    return () => window.clearTimeout(timer);
+  }, [lesson, automatic, onNext, onPhase]);
+  return (
+    <svg
+      className="pencil-fallback"
+      viewBox="0 0 768 576"
+      aria-label={`${lesson.letter} като ${lesson.word}`}
+    >
+      <rect width="768" height="576" rx="24" fill="#fffdf5" />
+      {lesson.handwriting.map((path, index) => (
+        <path
+          key={`letter-${index}`}
+          d={path}
+          fill="none"
+          stroke="#7860b3"
+          strokeWidth="5"
+          strokeLinecap="round"
+        />
+      ))}
+      {lesson.picture.map((path, index) => (
+        <path
+          key={`picture-${index}`}
+          d={path}
+          fill="none"
+          stroke="#548c76"
+          strokeWidth="4"
+        />
+      ))}
+      <text
+        x="572"
+        y="175"
+        textAnchor="middle"
+        fill="#7860b3"
+        fontSize="64"
+        fontWeight="bold"
+      >
+        {lesson.letter}
+        {lesson.letter.toLocaleLowerCase("bg")}
+      </text>
+      <text x="384" y="500" textAnchor="middle" fill="#63566f" fontSize="28">
+        {lesson.letter} като {lesson.word}
+      </text>
+    </svg>
+  );
+}
+
 export default function Sculpture() {
+  const [lessonIndex, setLessonIndex] = useState(0);
+  const [phase, setPhase] = useState<DrawingPhase>("writing");
   const [reduced, setReduced] = useState(false);
-  const [spread, setSpread] = useState(0);
-  const [flip, setFlip] = useState<Flip | null>(null);
   const [paused, setPaused] = useState(false);
   const [visible, setVisible] = useState(false);
   const [tabVisible, setTabVisible] = useState(true);
-  const [fontState, setFontState] = useState<"loading" | "ready" | "error">(
-    "loading",
-  );
-  const [fontAttempt, setFontAttempt] = useState(0);
-  const pointer = useRef({ x: 0, y: 0 });
+  const [webgl, setWebgl] = useState<boolean | null>(null);
   const widget = useRef<HTMLDivElement>(null);
-  const direction = useRef<1 | -1>(1);
-  const automatic =
-    visible && tabVisible && !reduced && !paused && fontState === "ready";
+  const pointer = useRef({ x: 0, y: 0 });
+  const lesson = pencilLessons[lessonIndex];
+  const automatic = visible && tabVisible && !reduced && !paused;
+  const next = useCallback(() => {
+    setPhase("writing");
+    setLessonIndex((index) => (index + 1) % pencilLessons.length);
+  }, []);
 
   useEffect(() => {
-    let active = true;
-    setFontState("loading");
-    const font = new FontFace(
-      "Malki Handwriting",
-      'url("/fonts/MarckScript-Regular.ttf")',
-      { style: "normal", weight: "400" },
-    );
-    font
-      .load()
-      .then((loaded) => {
-        if (!active) return;
-        document.fonts.add(loaded);
-        setFontState("ready");
-      })
-      .catch(() => {
-        if (active) setFontState("error");
-      });
-    return () => {
-      active = false;
-      document.fonts.delete(font);
-    };
-  }, [fontAttempt]);
+    const probe = document.createElement("canvas");
+    try {
+      const context = probe.getContext("webgl2");
+      setWebgl(!!context);
+      context?.getExtension("WEBGL_lose_context")?.loseContext();
+    } catch {
+      setWebgl(false);
+    }
+  }, []);
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -356,144 +444,98 @@ export default function Sculpture() {
     };
     const syncTab = () => setTabVisible(!document.hidden);
     syncTab();
-    window.addEventListener("pointermove", follow, { passive: true });
-    document.addEventListener("visibilitychange", syncTab);
     const observer = new IntersectionObserver(
       ([entry]) => setVisible(entry.isIntersecting),
       { threshold: 0.15 },
     );
     if (widget.current) observer.observe(widget.current);
+    window.addEventListener("pointermove", follow, { passive: true });
+    document.addEventListener("visibilitychange", syncTab);
     return () => {
+      observer.disconnect();
       query.removeEventListener("change", sync);
       window.removeEventListener("pointermove", follow);
       document.removeEventListener("visibilitychange", syncTab);
-      observer.disconnect();
     };
   }, []);
-
-  const finishFlip = useCallback(() => {
-    if (!flip) return;
-    setSpread(flip.target);
-    setFlip(null);
-  }, [flip]);
-
-  useEffect(() => {
-    if (flip) {
-      if (!automatic) {
-        finishFlip();
-        return;
-      }
-      // Also complete the turn when WebGL is unavailable and the text fallback is shown.
-      const timer = window.setTimeout(finishFlip, 950);
-      return () => window.clearTimeout(timer);
-    }
-    if (!automatic) return;
-    const timer = window.setTimeout(() => {
-      const nextDirection =
-        spread === 0 ? 1 : spread === spreadCount - 1 ? -1 : direction.current;
-      direction.current = nextDirection;
-      setFlip({ direction: nextDirection, target: spread + nextDirection });
-    }, 3200);
-    return () => window.clearTimeout(timer);
-  }, [automatic, spread, flip, finishFlip]);
 
   return (
     <div
       ref={widget}
-      className="book-widget"
+      className="pencil-widget"
       role="group"
-      aria-label="Жива книжка с печатни и ръкописни букви"
-      data-handwriting={fontState}
+      aria-label="Вълшебен молив - букви и рисунки"
       data-animation={automatic ? "playing" : "paused"}
+      data-lesson={lesson.letter}
+      data-phase={phase}
+      data-renderer={webgl === null ? "loading" : webgl ? "3d" : "svg"}
     >
       <div
-        className="book-canvas"
+        className="pencil-canvas"
         role="img"
-        aria-label={`Отворена книга с печатни и ръкописни главни и малки букви: ${alphabet[spread * 2][0]} като ${alphabet[spread * 2][1]}, ${alphabet[spread * 2 + 1][0]} като ${alphabet[spread * 2 + 1][1]}. Страниците се разлистват сами, а движението на мишката накланя книгата.`}
+        aria-label={`3D молив изписва ръкописни ${lesson.letter}${lesson.letter.toLocaleLowerCase("bg")} и рисува ${lesson.word}. Печатният вариант се появява до ръкописния. Анимацията тръгва сама.`}
       >
-        <Canvas
-          camera={{ position: [0, 0, 5.2], fov: 43 }}
-          dpr={[1, 1.5]}
-          frameloop={visible && tabVisible ? "always" : "demand"}
-          gl={{ antialias: true, powerPreference: "low-power" }}
-          fallback={
-            <div className="book-fallback">
-              <strong>
-                {alphabet[spread * 2][0]} · {alphabet[spread * 2 + 1][0]}
-              </strong>
-              {fontState === "ready" && (
-                <span className="handwriting-preview">
-                  {alphabet[spread * 2][0]}
-                  {alphabet[spread * 2][0].toLocaleLowerCase("bg")} ·{" "}
-                  {alphabet[spread * 2 + 1][0]}
-                  {alphabet[spread * 2 + 1][0].toLocaleLowerCase("bg")}
-                </span>
-              )}
-              <span>
-                {alphabet[spread * 2][1]} · {alphabet[spread * 2 + 1][1]}
-              </span>
-            </div>
-          }
-        >
-          <ambientLight intensity={1.8} />
-          <directionalLight position={[-3, 4, 5]} intensity={2.5} />
-          <Float
-            enabled={automatic}
-            speed={1}
-            rotationIntensity={0.03}
-            floatIntensity={0.13}
+        {webgl === false ? (
+          <DrawingFallback
+            lesson={lesson}
+            automatic={automatic}
+            onNext={next}
+            onPhase={setPhase}
+          />
+        ) : webgl === true ? (
+          <Canvas
+            camera={{ position: [0, 0, 6.4], fov: 43 }}
+            dpr={[1, 1.5]}
+            frameloop={visible && tabVisible ? "always" : "demand"}
+            gl={{ antialias: true, powerPreference: "low-power" }}
           >
-            <BookModel
-              spread={spread}
-              flip={flip}
-              onComplete={finishFlip}
-              reduced={reduced || paused}
-              pointer={pointer}
-              handwritingReady={fontState === "ready"}
-            />
-          </Float>
-        </Canvas>
+            <ambientLight intensity={1.8} />
+            <directionalLight position={[-3, 4, 5]} intensity={2.8} />
+            <Float
+              enabled={automatic}
+              speed={0.8}
+              rotationIntensity={0.015}
+              floatIntensity={0.06}
+            >
+              <DrawingScene
+                lesson={lesson}
+                automatic={automatic}
+                reduced={reduced}
+                pointer={pointer}
+                onPhase={setPhase}
+                onNext={next}
+              />
+            </Float>
+          </Canvas>
+        ) : null}
       </div>
-      <div className="book-controls">
-        <div className="book-page-label">
+      <div className="pencil-controls">
+        <div className="pencil-label">
           <strong>
-            {alphabet[spread * 2][0]}
-            {alphabet[spread * 2][0].toLocaleLowerCase("bg")} ·{" "}
-            {alphabet[spread * 2 + 1][0]}
-            {alphabet[spread * 2 + 1][0].toLocaleLowerCase("bg")}
+            {lesson.letter} като {lesson.word}
           </strong>
-          <span>Печатни и ръкописни букви</span>
+          <span>
+            {phase === "writing"
+              ? "От една линия започва буквата…"
+              : phase === "picture"
+                ? "А от буквата - цяла рисунка!"
+                : "Печатно и ръкописно. Откритие след откритие."}
+          </span>
         </div>
         {!reduced && (
           <button
-            className="book-pause"
+            className="pencil-pause"
             type="button"
-            aria-label={
-              paused ? "Продължи разлистването" : "Спри разлистването"
-            }
+            aria-label={paused ? "Продължи рисуването" : "Спри рисуването"}
             onClick={() => setPaused((value) => !value)}
           >
             {paused ? "Продължи" : "Пауза"}
           </button>
         )}
       </div>
-      {fontState === "error" ? (
-        <div className="book-font-error" role="alert">
-          Ръкописните букви не се заредиха.
-          <button onClick={() => setFontAttempt((attempt) => attempt + 1)}>
-            Опитай отново
-          </button>
-        </div>
-      ) : (
-        <p className="book-writing-note" aria-live="polite">
-          {fontState === "loading"
-            ? "Зареждаме ръкописните букви…"
-            : reduced
-              ? "Разгледай буквите спокойно."
-              : "Страниците оживяват сами. Просто погледай."}
-        </p>
-      )}
-      <p className="book-hint">Движи мишката и книжката ще те последва.</p>
+      <p className="pencil-hint">
+        Моливът рисува сам. Ти само следвай въображението си.
+      </p>
     </div>
   );
 }

@@ -10,7 +10,9 @@ import LearningGame, {
 
 const Sculpture = dynamic(() => import("@/components/Sculpture"), {
   ssr: false,
-  loading: () => <div className="book-loading">Разгръщаме нашата азбука…</div>,
+  loading: () => (
+    <div className="pencil-loading">Приготвяме молива и въображението…</div>
+  ),
 });
 const reveal = {
   initial: { opacity: 0, y: 18 },
@@ -117,7 +119,7 @@ export default function Home() {
             </div>
           </motion.div>
           <div className="hero-art">
-            <div className="book-halo" />
+            <div className="pencil-halo" />
             <Sculpture />
             <span className="art-note">
               Всяко „защо?“
