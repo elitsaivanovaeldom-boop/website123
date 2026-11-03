@@ -10,11 +10,7 @@ import LearningGame, {
 
 const Sculpture = dynamic(() => import("@/components/Sculpture"), {
   ssr: false,
-  loading: () => (
-    <div className="planet-canvas planet-fallback">
-      Подреждаме нашата вселена…
-    </div>
-  ),
+  loading: () => <div className="book-loading">Разгръщаме нашата азбука…</div>,
 });
 const reveal = {
   initial: { opacity: 0, y: 18 },
@@ -121,21 +117,8 @@ export default function Home() {
             </div>
           </motion.div>
           <div className="hero-art">
-            <div className="planet-halo" />
-            <span className="orbit-label label-letter" aria-hidden="true">
-              А<span>а</span>
-            </span>
-            <span className="orbit-label label-number" aria-hidden="true">
-              1<span>2</span>3
-            </span>
-            <span className="orbit-star" aria-hidden="true">
-              ✧
-            </span>
+            <div className="book-halo" />
             <Sculpture />
-            <span className="planet-caption">
-              <span aria-hidden="true">↔</span> Движи мишката или плъзни с
-              пръст
-            </span>
             <span className="art-note">
               Всяко „защо?“
               <br />е ново начало.
