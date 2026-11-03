@@ -216,44 +216,23 @@ test("syllables count one to four parts and mode changes reset feedback", async 
   ).toHaveAttribute("aria-pressed", "true");
 });
 
-test("book shows local handwriting and follows the mouse without clicks", async ({
+test("pencil shows finished handwriting with reduced motion and follows the mouse", async ({
   page,
   isMobile,
 }) => {
-  await expect(page.locator(".book-widget")).toHaveAttribute(
-    "data-handwriting",
-    "ready",
+  const widget = page.locator(".pencil-widget");
+  await widget.scrollIntoViewIfNeeded();
+  await expect(widget).toHaveAttribute("data-phase", "complete");
+  await expect(widget).toHaveAttribute("data-animation", "paused");
+  await expect(page.getByRole("img", { name: /^3D молив/ })).toBeVisible();
+  await expect(page.locator(".pencil-label strong")).toHaveText(
+    "А като автобус",
   );
-  const font = await page.evaluate(async () => {
-    const faces = await document.fonts.load(
-      '100px "Malki Handwriting"',
-      "АаБбДдТтЖжЩщЪъЬьЮюЯя",
-    );
-    const canvas = document.createElement("canvas");
-    const context = canvas.getContext("2d")!;
-    context.font = '100px "Malki Handwriting"';
-    const handwriting = context.measureText("АаБбДдТтЖжЩщЪъЬьЮюЯя").width;
-    context.font = "100px Arial";
-    return {
-      loaded:
-        faces.length > 0 && faces.every((face) => face.status === "loaded"),
-      difference: Math.abs(
-        handwriting - context.measureText("АаБбДдТтЖжЩщЪъЬьЮюЯя").width,
-      ),
-    };
-  });
-  expect(font.loaded).toBe(true);
-  expect(font.difference).toBeGreaterThan(1);
-  await expect(
-    page.getByRole("img", { name: /Отворена книга с печатни и ръкописни/ }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("button", { name: "Следващи букви" }),
-  ).toHaveCount(0);
   const canvas = page.locator("canvas");
-  await canvas.scrollIntoViewIfNeeded();
-  const box = (await canvas.boundingBox())!;
+  await expect(canvas).toBeVisible();
+  await expect(page.locator(".pencil-fallback")).toHaveCount(0);
   if (!isMobile) {
+    const box = (await canvas.boundingBox())!;
     await page.mouse.move(box.x + 40, box.y + 40);
     const before = await canvas.screenshot();
     await page.mouse.move(box.x + box.width - 40, box.y + box.height - 40, {
@@ -266,52 +245,82 @@ test("book shows local handwriting and follows the mouse without clicks", async 
   }
 });
 
-test("book automatically turns pages, pauses and resumes on desktop and mobile", async ({
+test("pencil writes a letter, draws a picture and changes lessons without clicks", async ({
   page,
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await page.locator(".book-widget").scrollIntoViewIfNeeded();
-  await expect(page.locator(".book-widget")).toHaveAttribute(
-    "data-animation",
-    "playing",
-  );
-  // No click or swipe starts the animation.
-  await expect(page.locator(".book-page-label strong")).toHaveText("Мм · Рр", {
+  const widget = page.locator(".pencil-widget");
+  await widget.scrollIntoViewIfNeeded();
+  await expect(widget).toHaveAttribute("data-animation", "playing");
+  await expect(widget).toHaveAttribute("data-phase", "writing");
+  const early = await page.locator("canvas").screenshot();
+  await expect(widget).toHaveAttribute("data-phase", "picture", {
+    timeout: 10000,
+  });
+  expect((await page.locator("canvas").screenshot()).equals(early)).toBe(false);
+  await expect(widget).toHaveAttribute("data-phase", "complete", {
     timeout: 8000,
   });
-  await expect(page.locator(".book-page-label strong")).toHaveText("Сс · Яя", {
-    timeout: 8000,
+  await expect(widget).toHaveAttribute("data-lesson", "Б", { timeout: 8000 });
+  await expect(page.locator(".pencil-label strong")).toHaveText("Б като балон");
+  await expect(widget).toHaveAttribute("data-phase", "picture", {
+    timeout: 10000,
   });
-  await page.getByRole("button", { name: "Спри разлистването" }).click();
-  await expect(page.locator(".book-widget")).toHaveAttribute(
-    "data-animation",
-    "paused",
-  );
-  const paused = await page.locator(".book-page-label strong").textContent();
-  await page.waitForTimeout(4300);
-  await expect(page.locator(".book-page-label strong")).toHaveText(paused!);
-  await page.getByRole("button", { name: "Продължи разлистването" }).click();
-  await expect(page.locator(".book-page-label strong")).not.toHaveText(
-    paused!,
-    { timeout: 8000 },
-  );
+  await page.getByRole("button", { name: "Спри рисуването" }).click();
+  await expect(widget).toHaveAttribute("data-animation", "paused");
+  await page.waitForTimeout(300);
+  const paused = await page.locator("canvas").screenshot();
+  await page.waitForTimeout(4200);
+  expect((await page.locator("canvas").screenshot()).equals(paused)).toBe(true);
+  await page.getByRole("button", { name: "Продължи рисуването" }).click();
+  await expect(widget).toHaveAttribute("data-phase", "complete", {
+    timeout: 12000,
+  });
+  await expect(widget).toHaveAttribute("data-lesson", "А", { timeout: 8000 });
 });
 
-test("reduced motion stops autoplay and the mobile book allows vertical scrolling", async ({
+test("pencil keeps a readable SVG alternative when WebGL is unavailable", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const original = HTMLCanvasElement.prototype.getContext;
+    HTMLCanvasElement.prototype.getContext = function (
+      this: HTMLCanvasElement,
+      kind: string,
+      ...args: unknown[]
+    ) {
+      if (
+        kind === "webgl2" ||
+        kind === "webgl" ||
+        kind === "experimental-webgl"
+      )
+        return null;
+      return original.apply(this, [kind, ...args] as Parameters<
+        typeof original
+      >);
+    } as typeof original;
+  });
+  await page.reload();
+  await expect(page.locator(".pencil-widget")).toHaveAttribute(
+    "data-renderer",
+    "svg",
+  );
+  await expect(page.locator(".pencil-fallback")).toBeVisible();
+  await expect(page.locator(".pencil-fallback")).toContainText(
+    "А като автобус",
+  );
+  await expect(page.locator(".pencil-fallback")).toContainText("Аа");
+  await expect(page.locator("canvas")).toHaveCount(0);
+});
+
+test("pencil stops offscreen and allows vertical mobile scrolling", async ({
   page,
   context,
   isMobile,
 }) => {
-  await expect(page.locator(".book-widget")).toHaveAttribute(
-    "data-handwriting",
-    "ready",
-  );
-  const book = page.locator(".book-widget");
-  await book.scrollIntoViewIfNeeded();
-  await expect(book).toHaveAttribute("data-animation", "paused");
-  const original = await page.locator(".book-page-label strong").textContent();
-  await page.waitForTimeout(4300);
-  await expect(page.locator(".book-page-label strong")).toHaveText(original!);
+  const widget = page.locator(".pencil-widget");
+  await widget.scrollIntoViewIfNeeded();
+  await expect(widget).toHaveAttribute("data-phase", "complete");
   if (isMobile) {
     const box = (await page.locator("canvas").boundingBox())!;
     const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 };
@@ -333,39 +342,12 @@ test("reduced motion stops autoplay and the mobile book allows vertical scrollin
     await expect
       .poll(() => page.evaluate(() => scrollY))
       .toBeGreaterThan(before);
-    await expect(page.locator(".book-page-label strong")).toHaveText(original!);
   }
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  await book.scrollIntoViewIfNeeded();
-  await expect(book).toHaveAttribute("data-animation", "playing");
+  await widget.scrollIntoViewIfNeeded();
+  await expect(widget).toHaveAttribute("data-animation", "playing");
   await page.locator("#parents").scrollIntoViewIfNeeded();
-  await expect(book).toHaveAttribute("data-animation", "paused");
-});
-
-test("handwriting font can recover after a failed local font request", async ({
-  page,
-}) => {
-  let fail = true;
-  await page.route("**/fonts/MarckScript-Regular.ttf", (route) =>
-    fail ? route.abort() : route.continue(),
-  );
-  await page.reload();
-  await expect(page.locator(".book-widget")).toHaveAttribute(
-    "data-handwriting",
-    "error",
-  );
-  await expect(page.locator(".book-widget").getByRole("alert")).toContainText(
-    "Ръкописните букви не се заредиха",
-  );
-  fail = false;
-  await page
-    .getByRole("button", { name: "Опитай отново", exact: true })
-    .click();
-  await expect(page.locator(".book-widget")).toHaveAttribute(
-    "data-handwriting",
-    "ready",
-  );
-  await expect(page.locator(".book-font-error")).toHaveCount(0);
+  await expect(widget).toHaveAttribute("data-animation", "paused");
 });
 
 test("layout fits small phones, tablets and desktop screens", async ({
