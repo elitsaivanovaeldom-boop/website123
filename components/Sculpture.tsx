@@ -1,346 +1,111 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Float, RoundedBox } from "@react-three/drei";
+import { Environment, Float, Lightformer } from "@react-three/drei";
 import {
-  useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type MutableRefObject,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import * as THREE from "three";
-import { alphabet, spreadCount } from "@/lib/alphabet";
 
-const PAGE_WIDTH = 1.48;
-const PAGE_HEIGHT = 2.05;
-
-function createPageTexture(index: number, handwritingReady: boolean) {
-  const [letter, word] = alphabet[index];
-  const canvas = document.createElement("canvas");
-  canvas.width = 768;
-  canvas.height = 1024;
-  const context = canvas.getContext("2d")!;
-  const accent = index % 2 === 0 ? "#7760b4" : "#4e8a75";
-  context.fillStyle = "#fffdf4";
-  context.fillRect(0, 0, 768, 1024);
-  const shadow = context.createLinearGradient(0, 0, 768, 0);
-  shadow.addColorStop(0, index % 2 ? "#ded5c655" : "#ffffff00");
-  shadow.addColorStop(1, index % 2 ? "#ffffff00" : "#ded5c655");
-  context.fillStyle = shadow;
-  context.fillRect(0, 0, 768, 1024);
-  context.textAlign = "center";
-  context.fillStyle = "#968c9e";
-  context.font = "24px Arial, sans-serif";
-  context.fillText("МОЯТА ВЪЛШЕБНА КНИЖКА", 384, 86);
-  context.strokeStyle = "#e8e0d3";
-  context.lineWidth = 2;
-  context.beginPath();
-  context.moveTo(76, 120);
-  context.lineTo(692, 120);
-  context.stroke();
-
-  // Both typefaces are rendered locally; handwriting waits for the bundled font.
-  context.fillStyle = "#968c9e";
-  context.font = "24px Arial, sans-serif";
-  context.fillText("ПЕЧАТНИ БУКВИ", 384, 176);
-  context.fillStyle = index % 2 ? "#e3eee4" : "#eee6f8";
-  context.beginPath();
-  context.arc(384, 290, 125, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = accent;
-  context.font = "bold 180px Arial, sans-serif";
-  context.fillText(letter + letter.toLocaleLowerCase("bg"), 384, 355);
-
-  context.fillStyle = "#968c9e";
-  context.font = "24px Arial, sans-serif";
-  context.fillText("РЪКОПИСНИ БУКВИ", 384, 452);
-  for (const [line, y] of [490, 570, 670, 730].entries()) {
-    context.strokeStyle = line === 2 ? "#b6a7ce" : "#e5dcee";
-    context.setLineDash(line === 1 ? [8, 8] : []);
-    context.beginPath();
-    context.moveTo(100, y);
-    context.lineTo(668, y);
-    context.stroke();
-  }
-  context.setLineDash([]);
-  context.fillStyle = accent;
-  if (handwritingReady) {
-    context.font = '220px "Malki Handwriting"';
-    context.fillText(letter + letter.toLocaleLowerCase("bg"), 384, 670);
-  } else {
-    context.font = "24px Arial, sans-serif";
-    context.fillText("Зареждане на ръкописните букви…", 384, 610);
-  }
-
-  context.fillStyle = "#453d57";
-  context.font = "bold 50px Arial, sans-serif";
-  context.fillText(word, 384, 825);
-  context.fillStyle = "#8e8194";
-  context.font = "29px Arial, sans-serif";
-  context.fillText(`${letter} като ${word.toLocaleLowerCase("bg")}`, 384, 880);
-
-  for (let dot = 0; dot < 5; dot++) {
-    context.fillStyle = [accent, "#dba67c", "#b5c79a", "#d7c6e9", "#9fc6bb"][
-      dot
-    ];
-    context.beginPath();
-    context.arc(
-      284 + dot * 50,
-      920,
-      dot === index % 5 ? 12 : 6,
-      0,
-      Math.PI * 2,
-    );
-    context.fill();
-  }
-  context.fillStyle = "#a79aa9";
-  context.font = "24px Arial, sans-serif";
-  context.fillText(String(index + 1).padStart(2, "0"), 384, 981);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
-  return texture;
+interface Rotation {
+  x: number;
+  y: number;
+}
+interface Drag {
+  id: number;
+  x: number;
+  y: number;
 }
 
-function PageSurface({
-  index,
-  side = "right",
-  back = false,
-  handwritingReady,
+function PlayfulFigure({
+  rotation,
+  dragging,
+  automatic,
 }: {
-  index: number;
-  side?: "left" | "right" | "turning";
-  back?: boolean;
-  handwritingReady: boolean;
+  rotation: MutableRefObject<Rotation>;
+  dragging: MutableRefObject<Drag | null>;
+  automatic: boolean;
 }) {
-  const texture = useMemo(
-    () => createPageTexture(index, handwritingReady),
-    [index, handwritingReady],
-  );
-  const geometry = useMemo(() => {
-    const plane = new THREE.PlaneGeometry(PAGE_WIDTH, PAGE_HEIGHT, 24, 1);
-    const positions = plane.attributes.position;
-    const uv = plane.attributes.uv;
-    for (let point = 0; point < positions.count; point++) {
-      const u = uv.getX(point);
-      positions.setZ(point, Math.sin(u * Math.PI) * 0.035);
-      if (back) uv.setX(point, 1 - u);
-    }
-    if (side === "turning") plane.translate(PAGE_WIDTH / 2, 0, 0);
-    plane.computeVertexNormals();
-    return plane;
-  }, [side, back]);
-  useEffect(() => () => texture.dispose(), [texture]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
-  return (
-    <mesh
-      geometry={geometry}
-      position={
-        side === "turning"
-          ? [0, 0, 0]
-          : [side === "left" ? -0.76 : 0.76, 0, 0.09]
-      }
-    >
-      <meshBasicMaterial
-        map={texture}
-        toneMapped={false}
-        side={back ? THREE.BackSide : THREE.FrontSide}
-      />
-    </mesh>
-  );
-}
-
-type Flip = { direction: 1 | -1; target: number };
-
-function TurningPage({
-  spread,
-  flip,
-  onComplete,
-  handwritingReady,
-}: {
-  spread: number;
-  flip: Flip;
-  onComplete: () => void;
-  handwritingReady: boolean;
-}) {
-  const page = useRef<THREE.Group>(null);
-  const elapsed = useRef(0);
-  const completed = useRef(false);
+  const figure = useRef<THREE.Group>(null);
   useFrame((_, delta) => {
-    if (!page.current || completed.current) return;
-    elapsed.current += delta;
-    const progress = Math.min(elapsed.current / 0.9, 1);
-    const eased = progress * progress * (3 - 2 * progress);
-    page.current.rotation.y =
-      flip.direction === 1 ? -Math.PI * eased : -Math.PI * (1 - eased);
-    if (progress === 1) {
-      completed.current = true;
-      onComplete();
-    }
-  });
-  const front = flip.direction === 1 ? spread * 2 + 1 : flip.target * 2 + 1;
-  const back = flip.direction === 1 ? flip.target * 2 : spread * 2;
-  return (
-    <group
-      ref={page}
-      position={[0, 0, 0.15]}
-      rotation={[0, flip.direction === 1 ? 0 : -Math.PI, 0]}
-    >
-      <PageSurface
-        index={front}
-        side="turning"
-        handwritingReady={handwritingReady}
-      />
-      <PageSurface
-        index={back}
-        side="turning"
-        back
-        handwritingReady={handwritingReady}
-      />
-    </group>
-  );
-}
-
-function BookModel({
-  spread,
-  flip,
-  onComplete,
-  reduced,
-  pointer,
-  handwritingReady,
-}: {
-  spread: number;
-  flip: Flip | null;
-  onComplete: () => void;
-  reduced: boolean;
-  pointer: MutableRefObject<{ x: number; y: number }>;
-  handwritingReady: boolean;
-}) {
-  const book = useRef<THREE.Group>(null);
-  useFrame((_, delta) => {
-    if (!book.current) return;
-    const x = 0.28 + pointer.current.y * 0.18;
-    const y = -0.24 + pointer.current.x * 0.4;
-    if (reduced) book.current.rotation.set(x, y, -0.06);
+    if (!figure.current) return;
+    if (automatic && !dragging.current)
+      rotation.current.y += Math.min(delta, 0.05) * 0.1;
+    if (!automatic)
+      figure.current.rotation.set(rotation.current.x, rotation.current.y, 0);
     else {
-      book.current.rotation.x = THREE.MathUtils.damp(
-        book.current.rotation.x,
-        x,
-        6,
+      figure.current.rotation.x = THREE.MathUtils.damp(
+        figure.current.rotation.x,
+        rotation.current.x,
+        7,
         delta,
       );
-      book.current.rotation.y = THREE.MathUtils.damp(
-        book.current.rotation.y,
-        y,
-        6,
+      figure.current.rotation.y = THREE.MathUtils.damp(
+        figure.current.rotation.y,
+        rotation.current.y,
+        7,
         delta,
       );
     }
   });
-  const left = flip?.direction === -1 ? flip.target * 2 : spread * 2;
-  const right = flip?.direction === 1 ? flip.target * 2 + 1 : spread * 2 + 1;
   return (
-    <group ref={book} rotation={[0.28, -0.24, -0.06]}>
-      {([-1, 1] as const).map((side) => (
-        <group key={side}>
-          <RoundedBox
-            args={[1.64, 2.24, 0.16]}
-            radius={0.045}
-            smoothness={3}
-            position={[side * 0.78, 0, -0.14]}
-          >
-            <meshStandardMaterial
-              color={side === -1 ? "#91bba6" : "#9b81c3"}
-              roughness={0.65}
-            />
-          </RoundedBox>
-          {[0, 1, 2, 3].map((layer) => (
-            <mesh
-              key={layer}
-              position={[side * 0.76, 0, -0.037 + layer * 0.025]}
-            >
-              <boxGeometry args={[1.49, 2.065, 0.018]} />
-              <meshStandardMaterial
-                color={layer % 2 ? "#eee5d4" : "#fff9e9"}
-                roughness={1}
-              />
-            </mesh>
-          ))}
-        </group>
-      ))}
-      <RoundedBox
-        args={[0.13, 2.25, 0.18]}
-        position={[0, 0, -0.08]}
-        radius={0.04}
-        smoothness={3}
-      >
-        <meshStandardMaterial color="#d3a172" />
-      </RoundedBox>
-      <mesh position={[0.62, -1.15, -0.085]}>
-        <boxGeometry args={[0.16, 0.5, 0.012]} />
-        <meshStandardMaterial color="#6ca891" />
-      </mesh>
-      <PageSurface
-        index={left}
-        side="left"
-        handwritingReady={handwritingReady}
-      />
-      <PageSurface index={right} handwritingReady={handwritingReady} />
-      {flip && (
-        <TurningPage
-          key={`${spread}-${flip.direction}`}
-          spread={spread}
-          flip={flip}
-          onComplete={onComplete}
-          handwritingReady={handwritingReady}
+    <group ref={figure} rotation={[0.15, 0, 0]}>
+      <mesh rotation={[0.28, 0.2, 0.2]}>
+        <torusKnotGeometry args={[1.04, 0.14, 220, 14, 2, 3]} />
+        <meshPhysicalMaterial
+          color="#a491d5"
+          metalness={0.45}
+          roughness={0.24}
+          clearcoat={1}
+          clearcoatRoughness={0.12}
+          envMapIntensity={1.4}
         />
-      )}
+      </mesh>
+      <mesh rotation={[1.1, 0.65, 0.7]} scale={0.82}>
+        <torusKnotGeometry args={[1.1, 0.075, 180, 12, 3, 4]} />
+        <meshPhysicalMaterial
+          color="#86c8b1"
+          metalness={0.4}
+          roughness={0.25}
+          clearcoat={1}
+          envMapIntensity={1.4}
+        />
+      </mesh>
+      <mesh rotation={[0.85, -0.55, 0.3]}>
+        <torusGeometry args={[1.5, 0.025, 10, 160]} />
+        <meshPhysicalMaterial
+          color="#e8b27f"
+          metalness={0.5}
+          roughness={0.22}
+          clearcoat={1}
+          envMapIntensity={1.5}
+        />
+      </mesh>
     </group>
   );
 }
 
 export default function Sculpture() {
   const [reduced, setReduced] = useState(false);
-  const [spread, setSpread] = useState(0);
-  const [flip, setFlip] = useState<Flip | null>(null);
   const [paused, setPaused] = useState(false);
   const [visible, setVisible] = useState(false);
   const [tabVisible, setTabVisible] = useState(true);
-  const [fontState, setFontState] = useState<"loading" | "ready" | "error">(
-    "loading",
-  );
-  const [fontAttempt, setFontAttempt] = useState(0);
-  const pointer = useRef({ x: 0, y: 0 });
+  const [webgl, setWebgl] = useState<boolean | null>(null);
+  const rotation = useRef<Rotation>({ x: 0.15, y: 0 });
+  const dragging = useRef<Drag | null>(null);
   const widget = useRef<HTMLDivElement>(null);
-  const direction = useRef<1 | -1>(1);
+  const fallback = useRef<SVGSVGElement>(null);
   const automatic =
-    visible && tabVisible && !reduced && !paused && fontState === "ready";
+    visible && tabVisible && !reduced && !paused && webgl === true;
 
-  useEffect(() => {
-    let active = true;
-    setFontState("loading");
-    const font = new FontFace(
-      "Malki Handwriting",
-      'url("/fonts/MarckScript-Regular.ttf")',
-      { style: "normal", weight: "400" },
-    );
-    font
-      .load()
-      .then((loaded) => {
-        if (!active) return;
-        document.fonts.add(loaded);
-        setFontState("ready");
-      })
-      .catch(() => {
-        if (active) setFontState("error");
-      });
-    return () => {
-      active = false;
-      document.fonts.delete(font);
-    };
-  }, [fontAttempt]);
+  function syncFallback() {
+    if (fallback.current)
+      fallback.current.style.transform = `perspective(600px) rotateX(${rotation.current.x * 25}deg) rotateY(${rotation.current.y * 35}deg)`;
+  }
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -348,152 +113,220 @@ export default function Sculpture() {
     sync();
     query.addEventListener("change", sync);
     const follow = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse" || event.buttons !== 0) return;
-      pointer.current = {
-        x: (event.clientX / window.innerWidth) * 2 - 1,
-        y: (event.clientY / window.innerHeight) * 2 - 1,
-      };
+      if (
+        event.pointerType !== "mouse" ||
+        event.buttons !== 0 ||
+        dragging.current
+      )
+        return;
+      rotation.current.y += event.movementX * 0.006;
+      rotation.current.x = THREE.MathUtils.clamp(
+        rotation.current.x + event.movementY * 0.003,
+        -1,
+        1,
+      );
+      syncFallback();
     };
     const syncTab = () => setTabVisible(!document.hidden);
     syncTab();
-    window.addEventListener("pointermove", follow, { passive: true });
-    document.addEventListener("visibilitychange", syncTab);
     const observer = new IntersectionObserver(
       ([entry]) => setVisible(entry.isIntersecting),
       { threshold: 0.15 },
     );
     if (widget.current) observer.observe(widget.current);
+    const probe = document.createElement("canvas");
+    try {
+      const context = probe.getContext("webgl2");
+      setWebgl(!!context);
+      context?.getExtension("WEBGL_lose_context")?.loseContext();
+    } catch {
+      setWebgl(false);
+    }
+    window.addEventListener("pointermove", follow, { passive: true });
+    document.addEventListener("visibilitychange", syncTab);
     return () => {
+      observer.disconnect();
       query.removeEventListener("change", sync);
       window.removeEventListener("pointermove", follow);
       document.removeEventListener("visibilitychange", syncTab);
-      observer.disconnect();
     };
   }, []);
 
-  const finishFlip = useCallback(() => {
-    if (!flip) return;
-    setSpread(flip.target);
-    setFlip(null);
-  }, [flip]);
-
-  useEffect(() => {
-    if (flip) {
-      if (!automatic) {
-        finishFlip();
-        return;
-      }
-      // Also complete the turn when WebGL is unavailable and the text fallback is shown.
-      const timer = window.setTimeout(finishFlip, 950);
-      return () => window.clearTimeout(timer);
-    }
-    if (!automatic) return;
-    const timer = window.setTimeout(() => {
-      const nextDirection =
-        spread === 0 ? 1 : spread === spreadCount - 1 ? -1 : direction.current;
-      direction.current = nextDirection;
-      setFlip({ direction: nextDirection, target: spread + nextDirection });
-    }, 3200);
-    return () => window.clearTimeout(timer);
-  }, [automatic, spread, flip, finishFlip]);
+  function move(event: ReactPointerEvent<HTMLDivElement>) {
+    const previous = dragging.current;
+    if (!previous || previous.id !== event.pointerId) return;
+    rotation.current.y += (event.clientX - previous.x) * 0.012;
+    rotation.current.x = THREE.MathUtils.clamp(
+      rotation.current.x + (event.clientY - previous.y) * 0.008,
+      -1,
+      1,
+    );
+    dragging.current = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    syncFallback();
+  }
+  function release(event: ReactPointerEvent<HTMLDivElement>) {
+    if (dragging.current?.id !== event.pointerId) return;
+    dragging.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+  }
 
   return (
     <div
       ref={widget}
-      className="book-widget"
+      className="figure-widget"
       role="group"
-      aria-label="Жива книжка с печатни и ръкописни букви"
-      data-handwriting={fontState}
+      aria-label="Цветна 3D фигура от преплетени форми"
+      aria-describedby="figure-hint"
+      tabIndex={0}
+      data-renderer={webgl === null ? "loading" : webgl ? "3d" : "svg"}
       data-animation={automatic ? "playing" : "paused"}
+      onKeyDown={(event) => {
+        if (
+          ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home"].includes(
+            event.key,
+          )
+        ) {
+          event.preventDefault();
+          if (event.key === "Home") rotation.current = { x: 0.15, y: 0 };
+          else if (event.key === "ArrowLeft" || event.key === "ArrowRight")
+            rotation.current.y += event.key === "ArrowRight" ? 0.25 : -0.25;
+          else
+            rotation.current.x = THREE.MathUtils.clamp(
+              rotation.current.x + (event.key === "ArrowDown" ? 0.15 : -0.15),
+              -1,
+              1,
+            );
+          syncFallback();
+        }
+      }}
     >
       <div
-        className="book-canvas"
+        className="figure-canvas"
         role="img"
-        aria-label={`Отворена книга с печатни и ръкописни главни и малки букви: ${alphabet[spread * 2][0]} като ${alphabet[spread * 2][1]}, ${alphabet[spread * 2 + 1][0]} като ${alphabet[spread * 2 + 1][1]}. Страниците се разлистват сами, а движението на мишката накланя книгата.`}
+        aria-label="Обемна лавандулова и ментова скулптура с тънък прасковен обръч. Завърта се с движение на мишката, плъзгане на пръст или стрелките на клавиатурата."
+        onPointerDown={(event) => {
+          if (!event.isPrimary || event.button !== 0) return;
+          dragging.current = {
+            id: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+          };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={move}
+        onPointerUp={release}
+        onPointerCancel={release}
+        onLostPointerCapture={() => {
+          dragging.current = null;
+        }}
       >
-        <Canvas
-          camera={{ position: [0, 0, 5.2], fov: 43 }}
-          dpr={[1, 1.5]}
-          frameloop={visible && tabVisible ? "always" : "demand"}
-          gl={{ antialias: true, powerPreference: "low-power" }}
-          fallback={
-            <div className="book-fallback">
-              <strong>
-                {alphabet[spread * 2][0]} · {alphabet[spread * 2 + 1][0]}
-              </strong>
-              {fontState === "ready" && (
-                <span className="handwriting-preview">
-                  {alphabet[spread * 2][0]}
-                  {alphabet[spread * 2][0].toLocaleLowerCase("bg")} ·{" "}
-                  {alphabet[spread * 2 + 1][0]}
-                  {alphabet[spread * 2 + 1][0].toLocaleLowerCase("bg")}
-                </span>
-              )}
-              <span>
-                {alphabet[spread * 2][1]} · {alphabet[spread * 2 + 1][1]}
-              </span>
-            </div>
-          }
-        >
-          <ambientLight intensity={1.8} />
-          <directionalLight position={[-3, 4, 5]} intensity={2.5} />
-          <Float
-            enabled={automatic}
-            speed={1}
-            rotationIntensity={0.03}
-            floatIntensity={0.13}
+        {webgl === true ? (
+          <Canvas
+            camera={{ position: [0, 0, 5.4], fov: 44 }}
+            dpr={[1, 1.5]}
+            frameloop={visible && tabVisible ? "always" : "demand"}
+            gl={{ antialias: true, powerPreference: "low-power" }}
           >
-            <BookModel
-              spread={spread}
-              flip={flip}
-              onComplete={finishFlip}
-              reduced={reduced || paused}
-              pointer={pointer}
-              handwritingReady={fontState === "ready"}
+            <ambientLight intensity={1.2} />
+            <directionalLight position={[4, 5, 6]} intensity={2.3} />
+            <directionalLight
+              position={[-4, -2, 3]}
+              intensity={1.2}
+              color="#ffe0bb"
             />
-          </Float>
-        </Canvas>
+            <Float
+              enabled={automatic}
+              speed={0.8}
+              rotationIntensity={0.025}
+              floatIntensity={0.1}
+            >
+              <PlayfulFigure
+                rotation={rotation}
+                dragging={dragging}
+                automatic={automatic}
+              />
+            </Float>
+            <Environment resolution={64} frames={1}>
+              <Lightformer
+                intensity={3}
+                position={[0, 5, -5]}
+                rotation={[Math.PI / 2, 0, 0]}
+                scale={[10, 10, 1]}
+              />
+              <Lightformer
+                intensity={2}
+                position={[-5, 0, 2]}
+                rotation={[0, Math.PI / 2, 0]}
+                scale={[6, 10, 1]}
+              />
+              <Lightformer
+                intensity={2}
+                position={[5, 2, 3]}
+                rotation={[0, -Math.PI / 2, 0]}
+                scale={[6, 10, 1]}
+              />
+            </Environment>
+          </Canvas>
+        ) : webgl === false ? (
+          <svg
+            ref={fallback}
+            className="figure-fallback"
+            viewBox="0 0 400 360"
+            aria-hidden="true"
+          >
+            <g fill="none" strokeLinecap="round">
+              <ellipse
+                cx="200"
+                cy="180"
+                rx="85"
+                ry="120"
+                stroke="#a491d5"
+                strokeWidth="22"
+                transform="rotate(45 200 180)"
+              />
+              <ellipse
+                cx="200"
+                cy="180"
+                rx="85"
+                ry="120"
+                stroke="#86c8b1"
+                strokeWidth="12"
+                transform="rotate(-45 200 180)"
+              />
+              <ellipse
+                cx="200"
+                cy="180"
+                rx="155"
+                ry="65"
+                stroke="#e8b27f"
+                strokeWidth="3"
+                transform="rotate(-20 200 180)"
+              />
+            </g>
+          </svg>
+        ) : null}
       </div>
-      <div className="book-controls">
-        <div className="book-page-label">
-          <strong>
-            {alphabet[spread * 2][0]}
-            {alphabet[spread * 2][0].toLocaleLowerCase("bg")} ·{" "}
-            {alphabet[spread * 2 + 1][0]}
-            {alphabet[spread * 2 + 1][0].toLocaleLowerCase("bg")}
-          </strong>
-          <span>Печатни и ръкописни букви</span>
-        </div>
-        {!reduced && (
+      <div className="figure-controls">
+        <p id="figure-hint">
+          Движи мишката или завърти с пръст.
+          <span>Можеш да използваш и стрелките на клавиатурата.</span>
+        </p>
+        {!reduced && webgl === true && (
           <button
-            className="book-pause"
+            className="figure-pause"
             type="button"
-            aria-label={
-              paused ? "Продължи разлистването" : "Спри разлистването"
-            }
+            aria-label={paused ? "Продължи движението" : "Спри движението"}
             onClick={() => setPaused((value) => !value)}
           >
             {paused ? "Продължи" : "Пауза"}
           </button>
         )}
       </div>
-      {fontState === "error" ? (
-        <div className="book-font-error" role="alert">
-          Ръкописните букви не се заредиха.
-          <button onClick={() => setFontAttempt((attempt) => attempt + 1)}>
-            Опитай отново
-          </button>
-        </div>
-      ) : (
-        <p className="book-writing-note" aria-live="polite">
-          {fontState === "loading"
-            ? "Зареждаме ръкописните букви…"
-            : reduced
-              ? "Разгледай буквите спокойно."
-              : "Страниците оживяват сами. Просто погледай."}
-        </p>
-      )}
-      <p className="book-hint">Движи мишката и книжката ще те последва.</p>
     </div>
   );
 }
