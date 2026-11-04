@@ -34,7 +34,7 @@ a {
   text-decoration: none;
 }
 button:disabled {
-  cursor: default;
+  cursor: grab;
 }
 button:focus-visible,
 a:focus-visible {
@@ -213,20 +213,20 @@ h1 > span {
   position: relative;
   min-width: 0;
 }
-.book-canvas {
+.figure-canvas {
   height: 460px;
   width: 100%;
-  cursor: default;
+  cursor: grab;
   position: relative;
   z-index: 1;
 }
-.book-canvas:active {
-  cursor: default;
+.figure-canvas:active {
+  cursor: grabbing;
 }
 canvas {
   touch-action: pan-y pinch-zoom;
 }
-.book-halo {
+.figure-halo {
   position: absolute;
   inset: 8% 4% 9%;
   background: radial-gradient(
@@ -237,7 +237,7 @@ canvas {
   );
   border-radius: 50%;
 }
-.book-fallback {
+.figure-fallback {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -246,7 +246,7 @@ canvas {
   font-size: 20px;
   text-align: center;
 }
-.book-fallback span {
+.figure-fallback span {
   font-size: 14px;
 }
 
@@ -635,6 +635,9 @@ h2 span {
   border-radius: 5px;
 }
 .question-visual {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  text-align: center;
   background: var(--tint);
   color: var(--tone);
   display: inline-flex;
@@ -895,7 +898,7 @@ h2 span {
   .hero {
     min-height: 690px;
   }
-  .book-canvas {
+  .figure-canvas {
     height: 500px;
   }
 }
@@ -917,7 +920,7 @@ h2 span {
     flex-wrap: wrap;
     gap: 18px;
   }
-  .book-canvas {
+  .figure-canvas {
     height: 400px;
   }
 
@@ -1016,7 +1019,7 @@ h2 span {
     width: 100%;
     margin: 0 auto;
   }
-  .book-canvas {
+  .figure-canvas {
     height: 345px;
   }
 
@@ -1115,6 +1118,9 @@ h2 span {
     font-size: 19px;
   }
   .question-visual {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    text-align: center;
     font-size: 27px;
     padding-inline: 22px;
   }
@@ -1188,19 +1194,19 @@ h2 span {
   }
 }
 
-.book-widget {
+.figure-widget {
   position: relative;
   z-index: 1;
 }
-.book-widget:focus-visible {
+.figure-widget:focus-visible {
   outline: 3px solid var(--purple);
   outline-offset: 3px;
   border-radius: 18px;
 }
-.book-canvas {
+.figure-canvas {
   touch-action: pan-y pinch-zoom;
 }
-.book-controls {
+.figure-controls {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -1209,7 +1215,7 @@ h2 span {
   z-index: 2;
   margin-top: -22px;
 }
-.book-controls button {
+.figure-controls button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1222,29 +1228,13 @@ h2 span {
   font-size: 21px;
   transition: background 0.2s;
 }
-.book-controls button:hover:not(:disabled) {
+.figure-controls button:hover:not(:disabled) {
   background: #e9e0f6;
 }
-.book-controls button:disabled {
+.figure-controls button:disabled {
   opacity: 0.35;
 }
-.book-page-label {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  min-width: 100px;
-}
-.book-page-label strong {
-  color: var(--purple);
-  font-size: 18px;
-  letter-spacing: 2px;
-}
-.book-page-label span {
-  color: var(--muted);
-  font-size: 10px;
-}
-.book-hint {
+.figure-hint {
   max-width: 340px;
   margin: 14px auto 0;
   padding-inline: 12px;
@@ -1253,34 +1243,7 @@ h2 span {
   color: var(--muted);
   line-height: 1.7;
 }
-.book-writing-note {
-  margin: 10px auto 0;
-  text-align: center;
-  font-size: 11px;
-  color: var(--purple);
-}
-.book-font-error {
-  max-width: 300px;
-  margin: 10px auto;
-  text-align: center;
-  font-size: 12px;
-  line-height: 1.6;
-  color: #92384a;
-}
-.book-font-error button {
-  display: block;
-  margin: 6px auto 0;
-  min-height: 44px;
-  padding: 8px 16px;
-  border: 1px solid currentColor;
-  border-radius: 20px;
-}
-.handwriting-preview {
-  font-family: "Malki Handwriting", cursive;
-  font-size: 48px !important;
-  line-height: 1.5;
-}
-.book-loading {
+.figure-loading {
   height: 550px;
   display: flex;
   align-items: center;
@@ -1288,26 +1251,98 @@ h2 span {
   color: var(--purple);
   font-size: 15px;
 }
-.book-fallback strong {
+.figure-fallback strong {
   font-size: 44px;
   margin-bottom: 20px;
 }
 @media (max-width: 760px) {
-  .book-loading {
+  .figure-loading {
     height: 435px;
   }
-  .book-canvas {
+  .figure-canvas {
     height: 320px;
   }
-  .book-hint {
+  .figure-hint {
     font-size: 10px;
   }
 }
 
-.book-controls button.book-pause {
+.figure-controls button.figure-pause {
   width: auto;
   min-width: 72px;
   padding: 8px 16px;
   border-radius: 24px;
   font-size: 12px;
+}
+
+.figure-controls {
+  margin-top: -6px;
+  gap: 16px;
+}
+.figure-controls p {
+  margin: 0;
+  color: var(--purple);
+  font-size: 12px;
+  text-align: center;
+  line-height: 1.8;
+}
+.figure-controls p span {
+  display: block;
+  color: var(--muted);
+  font-size: 10px;
+}
+.figure-fallback {
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-origin: center;
+}
+@media (max-width: 760px) {
+  .figure-canvas {
+    height: 360px;
+  }
+  .figure-controls {
+    gap: 10px;
+  }
+  .figure-controls p {
+    font-size: 11px;
+  }
+}
+
+.figure-legend {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 0 auto 18px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.figure-legend > span {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.figure-legend b {
+  padding: 4px 8px;
+  border-radius: 7px;
+  font-size: 11px;
+  letter-spacing: 1px;
+}
+.north-mark {
+  background: #f1ebfa;
+  color: #7764ab;
+}
+.south-mark {
+  background: #e6f1e9;
+  color: #487e6b;
+}
+@media (max-width: 760px) {
+  .figure-legend {
+    font-size: 10px;
+    gap: 8px 12px;
+  }
+  .figure-legend b {
+    font-size: 10px;
+  }
 }

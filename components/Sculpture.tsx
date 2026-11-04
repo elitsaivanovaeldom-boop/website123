@@ -1,346 +1,308 @@
 "use client";
 
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Float, RoundedBox } from "@react-three/drei";
 import {
-  useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
   type MutableRefObject,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import * as THREE from "three";
-import { alphabet, spreadCount } from "@/lib/alphabet";
+import coastlines from "@/lib/earth-coastlines.json";
+import {
+  globePoint,
+  globeLabels,
+  arcPoints,
+  GLOBE_RADIUS,
+} from "@/lib/earth-globe";
 
-const PAGE_WIDTH = 1.48;
-const PAGE_HEIGHT = 2.05;
+function segmentGeometry(lines: [number, number, number][][]) {
+  const positions: number[] = [];
+  for (const line of lines)
+    for (let index = 1; index < line.length; index++)
+      positions.push(...line[index - 1], ...line[index]);
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute(
+    "position",
+    new THREE.Float32BufferAttribute(positions, 3),
+  );
+  return geometry;
+}
 
-function createPageTexture(index: number, handwritingReady: boolean) {
-  const [letter, word] = alphabet[index];
-  const canvas = document.createElement("canvas");
-  canvas.width = 768;
-  canvas.height = 1024;
-  const context = canvas.getContext("2d")!;
-  const accent = index % 2 === 0 ? "#7760b4" : "#4e8a75";
-  context.fillStyle = "#fffdf4";
-  context.fillRect(0, 0, 768, 1024);
-  const shadow = context.createLinearGradient(0, 0, 768, 0);
-  shadow.addColorStop(0, index % 2 ? "#ded5c655" : "#ffffff00");
-  shadow.addColorStop(1, index % 2 ? "#ffffff00" : "#ded5c655");
-  context.fillStyle = shadow;
-  context.fillRect(0, 0, 768, 1024);
-  context.textAlign = "center";
-  context.fillStyle = "#968c9e";
-  context.font = "24px Arial, sans-serif";
-  context.fillText("МОЯТА ВЪЛШЕБНА КНИЖКА", 384, 86);
-  context.strokeStyle = "#e8e0d3";
-  context.lineWidth = 2;
-  context.beginPath();
-  context.moveTo(76, 120);
-  context.lineTo(692, 120);
-  context.stroke();
-
-  // Both typefaces are rendered locally; handwriting waits for the bundled font.
-  context.fillStyle = "#968c9e";
-  context.font = "24px Arial, sans-serif";
-  context.fillText("ПЕЧАТНИ БУКВИ", 384, 176);
-  context.fillStyle = index % 2 ? "#e3eee4" : "#eee6f8";
-  context.beginPath();
-  context.arc(384, 290, 125, 0, Math.PI * 2);
-  context.fill();
-  context.fillStyle = accent;
-  context.font = "bold 180px Arial, sans-serif";
-  context.fillText(letter + letter.toLocaleLowerCase("bg"), 384, 355);
-
-  context.fillStyle = "#968c9e";
-  context.font = "24px Arial, sans-serif";
-  context.fillText("РЪКОПИСНИ БУКВИ", 384, 452);
-  for (const [line, y] of [490, 570, 670, 730].entries()) {
-    context.strokeStyle = line === 2 ? "#b6a7ce" : "#e5dcee";
-    context.setLineDash(line === 1 ? [8, 8] : []);
+function GlobeSymbol({ label }: { label: (typeof globeLabels)[number] }) {
+  const sprite = useRef<THREE.Sprite>(null);
+  const vectors = useMemo(
+    () => ({
+      point: new THREE.Vector3(),
+      center: new THREE.Vector3(),
+      normal: new THREE.Vector3(),
+      view: new THREE.Vector3(),
+    }),
+    [],
+  );
+  useFrame(({ camera }) => {
+    if (!sprite.current?.parent) return;
+    sprite.current.getWorldPosition(vectors.point);
+    sprite.current.parent.getWorldPosition(vectors.center);
+    vectors.normal.copy(vectors.point).sub(vectors.center).normalize();
+    camera.getWorldPosition(vectors.view);
+    vectors.view.sub(vectors.point).normalize();
+    sprite.current.visible = vectors.normal.dot(vectors.view) > 0.12;
+  });
+  const texture = useMemo(() => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 128;
+    canvas.height = 160;
+    const context = canvas.getContext("2d")!;
+    const north = label.hemisphere === "north";
+    context.fillStyle = north ? "#f1ebfa" : "#e6f1e9";
     context.beginPath();
-    context.moveTo(100, y);
-    context.lineTo(668, y);
-    context.stroke();
-  }
-  context.setLineDash([]);
-  context.fillStyle = accent;
-  if (handwritingReady) {
-    context.font = '220px "Malki Handwriting"';
-    context.fillText(letter + letter.toLocaleLowerCase("bg"), 384, 670);
-  } else {
-    context.font = "24px Arial, sans-serif";
-    context.fillText("Зареждане на ръкописните букви…", 384, 610);
-  }
-
-  context.fillStyle = "#453d57";
-  context.font = "bold 50px Arial, sans-serif";
-  context.fillText(word, 384, 825);
-  context.fillStyle = "#8e8194";
-  context.font = "29px Arial, sans-serif";
-  context.fillText(`${letter} като ${word.toLocaleLowerCase("bg")}`, 384, 880);
-
-  for (let dot = 0; dot < 5; dot++) {
-    context.fillStyle = [accent, "#dba67c", "#b5c79a", "#d7c6e9", "#9fc6bb"][
-      dot
-    ];
-    context.beginPath();
-    context.arc(
-      284 + dot * 50,
-      920,
-      dot === index % 5 ? 12 : 6,
-      0,
-      Math.PI * 2,
-    );
+    context.roundRect(16, 20, 96, 120, 26);
     context.fill();
-  }
-  context.fillStyle = "#a79aa9";
-  context.font = "24px Arial, sans-serif";
-  context.fillText(String(index + 1).padStart(2, "0"), 384, 981);
-  const texture = new THREE.CanvasTexture(canvas);
-  texture.colorSpace = THREE.SRGBColorSpace;
-  texture.anisotropy = 4;
-  return texture;
-}
-
-function PageSurface({
-  index,
-  side = "right",
-  back = false,
-  handwritingReady,
-}: {
-  index: number;
-  side?: "left" | "right" | "turning";
-  back?: boolean;
-  handwritingReady: boolean;
-}) {
-  const texture = useMemo(
-    () => createPageTexture(index, handwritingReady),
-    [index, handwritingReady],
-  );
-  const geometry = useMemo(() => {
-    const plane = new THREE.PlaneGeometry(PAGE_WIDTH, PAGE_HEIGHT, 24, 1);
-    const positions = plane.attributes.position;
-    const uv = plane.attributes.uv;
-    for (let point = 0; point < positions.count; point++) {
-      const u = uv.getX(point);
-      positions.setZ(point, Math.sin(u * Math.PI) * 0.035);
-      if (back) uv.setX(point, 1 - u);
-    }
-    if (side === "turning") plane.translate(PAGE_WIDTH / 2, 0, 0);
-    plane.computeVertexNormals();
-    return plane;
-  }, [side, back]);
+    context.textAlign = "center";
+    context.textBaseline = "middle";
+    context.font = "bold 92px Arial, sans-serif";
+    context.fillStyle = north ? "#7764ab" : "#487e6b";
+    context.fillText(label.text, 64, 84);
+    const result = new THREE.CanvasTexture(canvas);
+    result.colorSpace = THREE.SRGBColorSpace;
+    return result;
+  }, [label]);
   useEffect(() => () => texture.dispose(), [texture]);
-  useEffect(() => () => geometry.dispose(), [geometry]);
+  const position = globePoint(
+    label.longitude,
+    label.latitude,
+    GLOBE_RADIUS + 0.045,
+  );
   return (
-    <mesh
-      geometry={geometry}
-      position={
-        side === "turning"
-          ? [0, 0, 0]
-          : [side === "left" ? -0.76 : 0.76, 0, 0.09]
-      }
+    <sprite
+      ref={sprite}
+      position={position}
+      scale={[0.27, 0.34, 1]}
+      renderOrder={2}
     >
-      <meshBasicMaterial
+      <spriteMaterial
         map={texture}
+        transparent
+        alphaTest={0.05}
+        depthTest={false}
+        depthWrite={false}
         toneMapped={false}
-        side={back ? THREE.BackSide : THREE.FrontSide}
       />
-    </mesh>
+    </sprite>
   );
 }
 
-type Flip = { direction: 1 | -1; target: number };
-
-function TurningPage({
-  spread,
-  flip,
-  onComplete,
-  handwritingReady,
-}: {
-  spread: number;
-  flip: Flip;
-  onComplete: () => void;
-  handwritingReady: boolean;
-}) {
-  const page = useRef<THREE.Group>(null);
-  const elapsed = useRef(0);
-  const completed = useRef(false);
-  useFrame((_, delta) => {
-    if (!page.current || completed.current) return;
-    elapsed.current += delta;
-    const progress = Math.min(elapsed.current / 0.9, 1);
-    const eased = progress * progress * (3 - 2 * progress);
-    page.current.rotation.y =
-      flip.direction === 1 ? -Math.PI * eased : -Math.PI * (1 - eased);
-    if (progress === 1) {
-      completed.current = true;
-      onComplete();
+function GlobeSurface() {
+  const grid = useMemo(() => {
+    const lines: [number, number, number][][] = [];
+    for (let longitude = 0; longitude < 180; longitude += 15) {
+      lines.push(
+        Array.from({ length: 181 }, (_, index) => {
+          const angle = (index * Math.PI) / 90;
+          const lon = ((longitude - 20) * Math.PI) / 180;
+          return [
+            GLOBE_RADIUS * Math.sin(angle) * Math.sin(lon),
+            GLOBE_RADIUS * Math.cos(angle),
+            GLOBE_RADIUS * Math.sin(angle) * Math.cos(lon),
+          ] as [number, number, number];
+        }),
+      );
     }
-  });
-  const front = flip.direction === 1 ? spread * 2 + 1 : flip.target * 2 + 1;
-  const back = flip.direction === 1 ? flip.target * 2 : spread * 2;
-  return (
-    <group
-      ref={page}
-      position={[0, 0, 0.15]}
-      rotation={[0, flip.direction === 1 ? 0 : -Math.PI, 0]}
-    >
-      <PageSurface
-        index={front}
-        side="turning"
-        handwritingReady={handwritingReady}
-      />
-      <PageSurface
-        index={back}
-        side="turning"
-        back
-        handwritingReady={handwritingReady}
-      />
-    </group>
+    for (let latitude = -75; latitude <= 75; latitude += 15)
+      if (latitude !== 0)
+        lines.push(
+          Array.from({ length: 181 }, (_, index) =>
+            globePoint(index * 2 - 180, latitude),
+          ),
+        );
+    return segmentGeometry(lines);
+  }, []);
+  const land = useMemo(
+    () =>
+      segmentGeometry(
+        coastlines.map((ring) => arcPoints(ring, GLOBE_RADIUS + 0.014)),
+      ),
+    [],
   );
-}
-
-function BookModel({
-  spread,
-  flip,
-  onComplete,
-  reduced,
-  pointer,
-  handwritingReady,
-}: {
-  spread: number;
-  flip: Flip | null;
-  onComplete: () => void;
-  reduced: boolean;
-  pointer: MutableRefObject<{ x: number; y: number }>;
-  handwritingReady: boolean;
-}) {
-  const book = useRef<THREE.Group>(null);
-  useFrame((_, delta) => {
-    if (!book.current) return;
-    const x = 0.28 + pointer.current.y * 0.18;
-    const y = -0.24 + pointer.current.x * 0.4;
-    if (reduced) book.current.rotation.set(x, y, -0.06);
-    else {
-      book.current.rotation.x = THREE.MathUtils.damp(
-        book.current.rotation.x,
-        x,
-        6,
-        delta,
-      );
-      book.current.rotation.y = THREE.MathUtils.damp(
-        book.current.rotation.y,
-        y,
-        6,
-        delta,
-      );
-    }
-  });
-  const left = flip?.direction === -1 ? flip.target * 2 : spread * 2;
-  const right = flip?.direction === 1 ? flip.target * 2 + 1 : spread * 2 + 1;
+  useEffect(
+    () => () => {
+      grid.dispose();
+      land.dispose();
+    },
+    [grid, land],
+  );
   return (
-    <group ref={book} rotation={[0.28, -0.24, -0.06]}>
-      {([-1, 1] as const).map((side) => (
-        <group key={side}>
-          <RoundedBox
-            args={[1.64, 2.24, 0.16]}
-            radius={0.045}
-            smoothness={3}
-            position={[side * 0.78, 0, -0.14]}
-          >
-            <meshStandardMaterial
-              color={side === -1 ? "#91bba6" : "#9b81c3"}
-              roughness={0.65}
-            />
-          </RoundedBox>
-          {[0, 1, 2, 3].map((layer) => (
-            <mesh
-              key={layer}
-              position={[side * 0.76, 0, -0.037 + layer * 0.025]}
-            >
-              <boxGeometry args={[1.49, 2.065, 0.018]} />
-              <meshStandardMaterial
-                color={layer % 2 ? "#eee5d4" : "#fff9e9"}
-                roughness={1}
-              />
-            </mesh>
-          ))}
-        </group>
-      ))}
-      <RoundedBox
-        args={[0.13, 2.25, 0.18]}
-        position={[0, 0, -0.08]}
-        radius={0.04}
-        smoothness={3}
-      >
-        <meshStandardMaterial color="#d3a172" />
-      </RoundedBox>
-      <mesh position={[0.62, -1.15, -0.085]}>
-        <boxGeometry args={[0.16, 0.5, 0.012]} />
-        <meshStandardMaterial color="#6ca891" />
+    <>
+      <mesh>
+        <sphereGeometry args={[GLOBE_RADIUS - 0.015, 64, 40]} />
+        <meshBasicMaterial color="#f9faf5" toneMapped={false} />
       </mesh>
-      <PageSurface
-        index={left}
-        side="left"
-        handwritingReady={handwritingReady}
+      <lineSegments geometry={grid}>
+        <lineBasicMaterial color="#b8accf" transparent opacity={0.42} />
+      </lineSegments>
+      <lineSegments geometry={land}>
+        <lineBasicMaterial color="#73a694" transparent opacity={0.9} />
+      </lineSegments>
+      <mesh rotation={[Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[GLOBE_RADIUS + 0.01, 0.006, 6, 180]} />
+        <meshBasicMaterial color="#dca272" toneMapped={false} />
+      </mesh>
+      {globeLabels.map((label) => (
+        <GlobeSymbol key={label.hemisphere + label.text} label={label} />
+      ))}
+    </>
+  );
+}
+
+function GlobeFallback({
+  svgRef,
+}: {
+  svgRef: MutableRefObject<SVGSVGElement | null>;
+}) {
+  const paths = coastlines.map((ring) => {
+    let path = "";
+    let started = false;
+    for (const [longitude, latitude] of ring) {
+      const [x, y, z] = globePoint(longitude, latitude, 1);
+      if (z < 0) {
+        started = false;
+        continue;
+      }
+      path += `${started ? "L" : "M"}${200 + x * 135},${180 - y * 135}`;
+      started = true;
+    }
+    return path;
+  });
+  return (
+    <svg
+      ref={svgRef}
+      className="figure-fallback"
+      viewBox="0 0 400 360"
+      aria-hidden="true"
+    >
+      <circle
+        cx="200"
+        cy="180"
+        r="135"
+        fill="#f9faf5"
+        stroke="#b8accf"
+        strokeWidth="0.7"
       />
-      <PageSurface index={right} handwritingReady={handwritingReady} />
-      {flip && (
-        <TurningPage
-          key={`${spread}-${flip.direction}`}
-          spread={spread}
-          flip={flip}
-          onComplete={onComplete}
-          handwritingReady={handwritingReady}
-        />
-      )}
+      <g fill="none" stroke="#c3b8d6" strokeWidth="0.6">
+        {[45, 90].map((radius) => (
+          <ellipse key={radius} cx="200" cy="180" rx={radius} ry="135" />
+        ))}
+        {[-90, -45, 45, 90].map((offset) => (
+          <ellipse
+            key={offset}
+            cx="200"
+            cy={180 + offset}
+            rx={Math.sqrt(135 ** 2 - offset ** 2)}
+            ry="16"
+          />
+        ))}
+      </g>
+      <g fill="none" stroke="#73a694" strokeWidth="0.9">
+        {paths.map((path, index) => (
+          <path key={index} d={path} />
+        ))}
+      </g>
+      <path d="M65 180H335" stroke="#dca272" strokeWidth="1.3" />
+      {globeLabels.map((label) => {
+        const [x, y, z] = globePoint(label.longitude, label.latitude, 1);
+        return z > 0.2 ? (
+          <text
+            key={label.hemisphere + label.text}
+            x={200 + x * 138}
+            y={185 - y * 138}
+            textAnchor="middle"
+            fontSize="17"
+            fontWeight="bold"
+            fill={label.hemisphere === "north" ? "#7764ab" : "#487e6b"}
+          >
+            {label.text}
+          </text>
+        ) : null;
+      })}
+    </svg>
+  );
+}
+
+interface Rotation {
+  x: number;
+  y: number;
+}
+interface Drag {
+  id: number;
+  x: number;
+  y: number;
+}
+
+function PlayfulFigure({
+  rotation,
+  dragging,
+  motion,
+}: {
+  rotation: MutableRefObject<Rotation>;
+  dragging: MutableRefObject<Drag | null>;
+  motion: MutableRefObject<boolean>;
+}) {
+  const figure = useRef<THREE.Group>(null);
+  const floatTime = useRef(0);
+  useFrame((_, delta) => {
+    if (!figure.current) return;
+    if (motion.current && !dragging.current) {
+      const step = Math.min(delta, 0.05);
+      rotation.current.y += step * 0.1;
+      floatTime.current += step;
+      figure.current.position.y = Math.sin(floatTime.current * 0.8) * 0.025;
+    }
+    if (!motion.current)
+      figure.current.rotation.set(rotation.current.x, rotation.current.y, 0);
+    else {
+      figure.current.rotation.x = THREE.MathUtils.damp(
+        figure.current.rotation.x,
+        rotation.current.x,
+        7,
+        delta,
+      );
+      figure.current.rotation.y = THREE.MathUtils.damp(
+        figure.current.rotation.y,
+        rotation.current.y,
+        7,
+        delta,
+      );
+    }
+  });
+  return (
+    <group ref={figure} rotation={[0, 0, 0]}>
+      <GlobeSurface />
     </group>
   );
 }
 
 export default function Sculpture() {
   const [reduced, setReduced] = useState(false);
-  const [spread, setSpread] = useState(0);
-  const [flip, setFlip] = useState<Flip | null>(null);
   const [paused, setPaused] = useState(false);
   const [visible, setVisible] = useState(false);
   const [tabVisible, setTabVisible] = useState(true);
-  const [fontState, setFontState] = useState<"loading" | "ready" | "error">(
-    "loading",
-  );
-  const [fontAttempt, setFontAttempt] = useState(0);
-  const pointer = useRef({ x: 0, y: 0 });
+  const [webgl, setWebgl] = useState<boolean | null>(null);
+  const rotation = useRef<Rotation>({ x: 0, y: 0 });
+  const dragging = useRef<Drag | null>(null);
   const widget = useRef<HTMLDivElement>(null);
-  const direction = useRef<1 | -1>(1);
+  const fallback = useRef<SVGSVGElement>(null);
   const automatic =
-    visible && tabVisible && !reduced && !paused && fontState === "ready";
+    visible && tabVisible && !reduced && !paused && webgl === true;
+  const motion = useRef(automatic);
+  motion.current = automatic;
 
-  useEffect(() => {
-    let active = true;
-    setFontState("loading");
-    const font = new FontFace(
-      "Malki Handwriting",
-      'url("/fonts/MarckScript-Regular.ttf")',
-      { style: "normal", weight: "400" },
-    );
-    font
-      .load()
-      .then((loaded) => {
-        if (!active) return;
-        document.fonts.add(loaded);
-        setFontState("ready");
-      })
-      .catch(() => {
-        if (active) setFontState("error");
-      });
-    return () => {
-      active = false;
-      document.fonts.delete(font);
-    };
-  }, [fontAttempt]);
+  function syncFallback() {
+    if (fallback.current)
+      fallback.current.style.transform = `perspective(600px) rotateX(${rotation.current.x * 25}deg) rotateY(${rotation.current.y * 35}deg)`;
+  }
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -348,152 +310,166 @@ export default function Sculpture() {
     sync();
     query.addEventListener("change", sync);
     const follow = (event: PointerEvent) => {
-      if (event.pointerType !== "mouse" || event.buttons !== 0) return;
-      pointer.current = {
-        x: (event.clientX / window.innerWidth) * 2 - 1,
-        y: (event.clientY / window.innerHeight) * 2 - 1,
-      };
+      if (
+        event.pointerType !== "mouse" ||
+        event.buttons !== 0 ||
+        dragging.current
+      )
+        return;
+      rotation.current.y += event.movementX * 0.006;
+      rotation.current.x = THREE.MathUtils.clamp(
+        rotation.current.x + event.movementY * 0.003,
+        -1,
+        1,
+      );
+      syncFallback();
     };
     const syncTab = () => setTabVisible(!document.hidden);
     syncTab();
-    window.addEventListener("pointermove", follow, { passive: true });
-    document.addEventListener("visibilitychange", syncTab);
     const observer = new IntersectionObserver(
       ([entry]) => setVisible(entry.isIntersecting),
       { threshold: 0.15 },
     );
     if (widget.current) observer.observe(widget.current);
+    const probe = document.createElement("canvas");
+    try {
+      const context = probe.getContext("webgl2");
+      setWebgl(!!context);
+      context?.getExtension("WEBGL_lose_context")?.loseContext();
+    } catch {
+      setWebgl(false);
+    }
+    window.addEventListener("pointermove", follow, { passive: true });
+    document.addEventListener("visibilitychange", syncTab);
     return () => {
+      observer.disconnect();
       query.removeEventListener("change", sync);
       window.removeEventListener("pointermove", follow);
       document.removeEventListener("visibilitychange", syncTab);
-      observer.disconnect();
     };
   }, []);
 
-  const finishFlip = useCallback(() => {
-    if (!flip) return;
-    setSpread(flip.target);
-    setFlip(null);
-  }, [flip]);
-
-  useEffect(() => {
-    if (flip) {
-      if (!automatic) {
-        finishFlip();
-        return;
-      }
-      // Also complete the turn when WebGL is unavailable and the text fallback is shown.
-      const timer = window.setTimeout(finishFlip, 950);
-      return () => window.clearTimeout(timer);
-    }
-    if (!automatic) return;
-    const timer = window.setTimeout(() => {
-      const nextDirection =
-        spread === 0 ? 1 : spread === spreadCount - 1 ? -1 : direction.current;
-      direction.current = nextDirection;
-      setFlip({ direction: nextDirection, target: spread + nextDirection });
-    }, 3200);
-    return () => window.clearTimeout(timer);
-  }, [automatic, spread, flip, finishFlip]);
+  function move(event: ReactPointerEvent<HTMLDivElement>) {
+    const previous = dragging.current;
+    if (!previous || previous.id !== event.pointerId) return;
+    rotation.current.y += (event.clientX - previous.x) * 0.012;
+    rotation.current.x = THREE.MathUtils.clamp(
+      rotation.current.x + (event.clientY - previous.y) * 0.008,
+      -1,
+      1,
+    );
+    dragging.current = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+    syncFallback();
+  }
+  function release(event: ReactPointerEvent<HTMLDivElement>) {
+    if (dragging.current?.id !== event.pointerId) return;
+    dragging.current = null;
+    if (event.currentTarget.hasPointerCapture(event.pointerId))
+      event.currentTarget.releasePointerCapture(event.pointerId);
+  }
 
   return (
     <div
       ref={widget}
-      className="book-widget"
+      className="figure-widget"
       role="group"
-      aria-label="Жива книжка с печатни и ръкописни букви"
-      data-handwriting={fontState}
+      aria-label="Учебен глобус - числа над екватора и български букви под него"
+      aria-describedby="figure-hint"
+      tabIndex={0}
+      data-renderer={webgl === null ? "loading" : webgl ? "3d" : "svg"}
       data-animation={automatic ? "playing" : "paused"}
+      onKeyDown={(event) => {
+        if (
+          ["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home"].includes(
+            event.key,
+          )
+        ) {
+          event.preventDefault();
+          if (event.key === "Home") rotation.current = { x: 0, y: 0 };
+          else if (event.key === "ArrowLeft" || event.key === "ArrowRight")
+            rotation.current.y += event.key === "ArrowRight" ? 0.25 : -0.25;
+          else
+            rotation.current.x = THREE.MathUtils.clamp(
+              rotation.current.x + (event.key === "ArrowDown" ? 0.15 : -0.15),
+              -1,
+              1,
+            );
+          syncFallback();
+        }
+      }}
     >
       <div
-        className="book-canvas"
+        className="figure-canvas"
         role="img"
-        aria-label={`Отворена книга с печатни и ръкописни главни и малки букви: ${alphabet[spread * 2][0]} като ${alphabet[spread * 2][1]}, ${alphabet[spread * 2 + 1][0]} като ${alphabet[spread * 2 + 1][1]}. Страниците се разлистват сами, а движението на мишката накланя книгата.`}
+        aria-label="Земно кълбо с фини меридиани, паралели и континенти. Над екватора са числата от 0 до 9, а под него са български букви. Завърта се с мишка, пръст или клавиатура."
+        onPointerDown={(event) => {
+          if (!event.isPrimary || event.button !== 0) return;
+          dragging.current = {
+            id: event.pointerId,
+            x: event.clientX,
+            y: event.clientY,
+          };
+          event.currentTarget.setPointerCapture(event.pointerId);
+        }}
+        onPointerMove={move}
+        onPointerUp={release}
+        onPointerCancel={release}
+        onLostPointerCapture={() => {
+          dragging.current = null;
+        }}
       >
-        <Canvas
-          camera={{ position: [0, 0, 5.2], fov: 43 }}
-          dpr={[1, 1.5]}
-          frameloop={visible && tabVisible ? "always" : "demand"}
-          gl={{ antialias: true, powerPreference: "low-power" }}
-          fallback={
-            <div className="book-fallback">
-              <strong>
-                {alphabet[spread * 2][0]} · {alphabet[spread * 2 + 1][0]}
-              </strong>
-              {fontState === "ready" && (
-                <span className="handwriting-preview">
-                  {alphabet[spread * 2][0]}
-                  {alphabet[spread * 2][0].toLocaleLowerCase("bg")} ·{" "}
-                  {alphabet[spread * 2 + 1][0]}
-                  {alphabet[spread * 2 + 1][0].toLocaleLowerCase("bg")}
-                </span>
-              )}
-              <span>
-                {alphabet[spread * 2][1]} · {alphabet[spread * 2 + 1][1]}
-              </span>
-            </div>
-          }
-        >
-          <ambientLight intensity={1.8} />
-          <directionalLight position={[-3, 4, 5]} intensity={2.5} />
-          <Float
-            enabled={automatic}
-            speed={1}
-            rotationIntensity={0.03}
-            floatIntensity={0.13}
+        {webgl === true ? (
+          <Canvas
+            camera={{ position: [0, 0, 5.4], fov: 44 }}
+            dpr={[1, 1.5]}
+            frameloop={visible && tabVisible ? "always" : "demand"}
+            gl={{ antialias: true, powerPreference: "low-power" }}
           >
-            <BookModel
-              spread={spread}
-              flip={flip}
-              onComplete={finishFlip}
-              reduced={reduced || paused}
-              pointer={pointer}
-              handwritingReady={fontState === "ready"}
+            <ambientLight intensity={1.2} />
+            <directionalLight position={[4, 5, 6]} intensity={2.3} />
+            <directionalLight
+              position={[-4, -2, 3]}
+              intensity={1.2}
+              color="#ffe0bb"
             />
-          </Float>
-        </Canvas>
+            <PlayfulFigure
+              rotation={rotation}
+              dragging={dragging}
+              motion={motion}
+            />
+          </Canvas>
+        ) : webgl === false ? (
+          <GlobeFallback svgRef={fallback} />
+        ) : null}
       </div>
-      <div className="book-controls">
-        <div className="book-page-label">
-          <strong>
-            {alphabet[spread * 2][0]}
-            {alphabet[spread * 2][0].toLocaleLowerCase("bg")} ·{" "}
-            {alphabet[spread * 2 + 1][0]}
-            {alphabet[spread * 2 + 1][0].toLocaleLowerCase("bg")}
-          </strong>
-          <span>Печатни и ръкописни букви</span>
-        </div>
-        {!reduced && (
+      <div className="figure-legend" role="group" aria-label="Двете полукълба">
+        <span>
+          <b className="north-mark">0-9</b> Числа над екватора
+        </span>
+        <span>
+          <b className="south-mark">А Б В</b> Букви под екватора
+        </span>
+      </div>
+      <div className="figure-controls">
+        <p id="figure-hint">
+          Движи мишката или завърти с пръст.
+          <span>Можеш да използваш и стрелките на клавиатурата.</span>
+        </p>
+        {!reduced && webgl === true && (
           <button
-            className="book-pause"
+            className="figure-pause"
             type="button"
-            aria-label={
-              paused ? "Продължи разлистването" : "Спри разлистването"
-            }
+            aria-label={paused ? "Продължи движението" : "Спри движението"}
             onClick={() => setPaused((value) => !value)}
           >
             {paused ? "Продължи" : "Пауза"}
           </button>
         )}
       </div>
-      {fontState === "error" ? (
-        <div className="book-font-error" role="alert">
-          Ръкописните букви не се заредиха.
-          <button onClick={() => setFontAttempt((attempt) => attempt + 1)}>
-            Опитай отново
-          </button>
-        </div>
-      ) : (
-        <p className="book-writing-note" aria-live="polite">
-          {fontState === "loading"
-            ? "Зареждаме ръкописните букви…"
-            : reduced
-              ? "Разгледай буквите спокойно."
-              : "Страниците оживяват сами. Просто погледай."}
-        </p>
-      )}
-      <p className="book-hint">Движи мишката и книжката ще те последва.</p>
     </div>
   );
 }

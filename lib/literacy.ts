@@ -53,6 +53,62 @@ export const literacyQuestions: Record<"sounds" | "syllables", Question[]> = {
       hint: "Кажи Л-И-М-О-Н. Гласните звукове И и О са на второ и четвърто място.",
       explanation: "ЛИМОН има 5 звука: С-Г-С-Г-С. Браво за старанието!",
     },
+    soundQuestion(
+      "СОМ",
+      "СГС",
+      ["ГСС", "ССГ"],
+      0,
+      "С и М са съгласни звукове. Между тях чуваш гласния О.",
+    ),
+    soundQuestion(
+      "ОКО",
+      "ГСГ",
+      ["ССГ", "СГГ"],
+      2,
+      "Кажи О-К-О. Думата започва и завършва с гласен звук.",
+    ),
+    soundQuestion(
+      "СТОЛ",
+      "ССГС",
+      ["СГСС", "ГССС"],
+      1,
+      "С и Т са два съгласни звука в началото. След тях чуваш О, после Л.",
+    ),
+    soundQuestion(
+      "КОТКА",
+      "СГССГ",
+      ["ССГСГ", "ГССГС"],
+      0,
+      "Гласните О и А са на второ и пето място.",
+    ),
+    soundQuestion(
+      "ИГЛА",
+      "ГССГ",
+      ["СГСГ", "ССГГ"],
+      2,
+      "И и А са гласни. Между тях са съгласните Г и Л.",
+    ),
+    soundQuestion(
+      "КОЛЕЛО",
+      "СГСГСГ",
+      ["ССГСГГ", "ГСГСГС"],
+      1,
+      "В К-О-Л-Е-Л-О съгласните и гласните се редуват.",
+    ),
+    soundQuestion(
+      "КРАК",
+      "ССГС",
+      ["СГСС", "ГССС"],
+      0,
+      "Думата започва с два съгласни звука - К и Р. Следва А и накрая К.",
+    ),
+    soundQuestion(
+      "ТРЕВА",
+      "ССГСГ",
+      ["СГССГ", "ГССГС"],
+      2,
+      "Гласните Е и А са на трето и пето място. Т, Р и В са съгласни.",
+    ),
   ],
   syllables: [
     {
@@ -96,6 +152,14 @@ export const literacyQuestions: Record<"sounds" | "syllables", Question[]> = {
         "ПЕ-ПЕ-РУ-ДА: 4 срички и 4 гласни звука. Четири малки пляскания!",
       syllables: ["ПЕ", "ПЕ", "РУ", "ДА"],
     },
+    syllableQuestion("КОН", ["КОН"], [2, 1, 3]),
+    syllableQuestion("РИБА", ["РИ", "БА"], [1, 3, 2]),
+    syllableQuestion("КОЛЕЛО", ["КО", "ЛЕ", "ЛО"], [3, 2, 4]),
+    syllableQuestion("БАНАН", ["БА", "НАН"], [2, 3, 1]),
+    syllableQuestion("РАКЕТА", ["РА", "КЕ", "ТА"], [2, 3, 4]),
+    syllableQuestion("МОРЕ", ["МО", "РЕ"], [1, 3, 2]),
+    syllableQuestion("САМОЛЕТ", ["СА", "МО", "ЛЕТ"], [3, 4, 2]),
+    syllableQuestion("ТЕМЕНУГА", ["ТЕ", "МЕ", "НУ", "ГА"], [3, 2, 4]),
   ],
 };
 
@@ -103,4 +167,42 @@ export function describeSoundModel(pattern: string) {
   return [...pattern]
     .map((sound) => (sound === "Г" ? "гласен" : "съгласен"))
     .join(", ");
+}
+
+function soundQuestion(
+  word: string,
+  pattern: string,
+  alternatives: [string, string],
+  correct: 0 | 1 | 2,
+  hint: string,
+): Question {
+  const choices = [...alternatives];
+  choices.splice(correct, 0, pattern);
+  return {
+    kind: "sound-model",
+    visual: word,
+    prompt: `Кой е звуковият модел на думата ${word}?`,
+    choices,
+    correct,
+    hint,
+    explanation: `${word}: ${describeSoundModel(pattern)}. Всяко квадратче показва един звук.`,
+  };
+}
+
+function syllableQuestion(
+  word: string,
+  syllables: string[],
+  alternatives: [number, number, number],
+): Question {
+  const count = syllables.length;
+  return {
+    kind: "syllables",
+    visual: word,
+    prompt: `Колко срички има в думата ${word}?`,
+    choices: alternatives.map(String),
+    correct: alternatives.indexOf(count),
+    syllables,
+    hint: `Кажи ${syllables.join("-")} и плясни при всяка част. Преброй плясканията.`,
+    explanation: `${syllables.join("-")} - ${count} ${count === 1 ? "сричка" : "срички"}. Браво за старанието!`,
+  };
 }
